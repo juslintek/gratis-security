@@ -163,7 +163,7 @@ final class Settings {
         echo '</td></tr>';
 
         self::checkbox_row($settings, 'integrity_enabled', __('File integrity monitoring', 'gratis-security'), __('Detect changes to WordPress core files against a saved baseline.', 'gratis-security'));
-        self::checkbox_row($settings, 'twofa_enabled', __('Two-factor authentication', 'gratis-security'), __('Require TOTP for administrator logins (per-user setup via WP-CLI).', 'gratis-security'));
+        self::checkbox_row($settings, 'twofa_enabled', __('Two-factor authentication', 'gratis-security'), __('Require a TOTP code for administrator logins. Each administrator enables it on their own profile page (or via WP-CLI).', 'gratis-security'));
 
         echo '</tbody></table>';
         submit_button();
