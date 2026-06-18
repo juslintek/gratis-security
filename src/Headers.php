@@ -17,6 +17,13 @@ final class Headers {
         if (headers_sent()) {
             return;
         }
+
+        // Strip the PHP version banner (F-03). The expose_php ini directive cannot
+        // be changed at runtime, so the X-Powered-By header is removed here. This
+        // runs regardless of the headers toggle or context — hiding the version
+        // never breaks output, and the banner leaks on admin requests too.
+        header_remove('X-Powered-By');
+
         if (!Settings::get_bool('headers_enabled', true)) {
             return;
         }
