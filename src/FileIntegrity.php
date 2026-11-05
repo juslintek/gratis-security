@@ -719,6 +719,9 @@ final class FileIntegrity {
     public static function get_server_instructions(): array {
         $root = self::get_project_root();
         $web_dir = $root . '/web';
+        if (is_dir('/var/www/12fa/deploy/current/web')) {
+            $web_dir = '/var/www/12fa/deploy/current/web';
+        }
 
         $auditd_cmd = "sudo auditctl -w " . escapeshellarg($web_dir) . " -p wa -k gratis_fim\n"
             . "echo \"-w " . $web_dir . " -p wa -k gratis_fim\" | sudo tee /etc/audit/rules.d/gratis-fim.rules\n"
