@@ -25,7 +25,7 @@ final class Settings {
      */
     public static function defaults(): array {
         return [
-            'waf_enabled'       => 1,
+            'waf_enabled'       => 0,
             'block_xmlrpc'      => 1,
             'headers_enabled'   => 1,
             'csp'               => '',
@@ -484,8 +484,8 @@ final class Settings {
     private static function render_block_log(): void {
         echo '<h2>' . esc_html__('Naujausi blokavimai', 'gratis-security') . '</h2>';
 
-        $log = get_option('gratis_security_blocks', []);
-        if (!is_array($log) || empty($log)) {
+        $log = WAF::get_blocks(50);
+        if (empty($log)) {
             echo '<p>' . esc_html__('Užblokuotų užklausų nėra.', 'gratis-security') . '</p>';
             return;
         }
@@ -496,7 +496,7 @@ final class Settings {
         submit_button(__('Išvalyti žurnalą', 'gratis-security'), 'secondary', 'submit', false);
         echo '</form>';
 
-        $recent = array_slice(array_reverse($log), 0, 50);
+        $recent = array_reverse($log);
         echo '<table class="widefat striped"><thead><tr><th>' . esc_html__('Laikas', 'gratis-security') . '</th><th>' . esc_html__('IP adresas', 'gratis-security') . '</th><th>' . esc_html__('Priežastis', 'gratis-security') . '</th><th>' . esc_html__('URI', 'gratis-security') . '</th></tr></thead><tbody>';
         foreach ($recent as $entry) {
             echo '<tr>';
@@ -525,7 +525,7 @@ final class Settings {
         check_admin_referer('gratis_security_action');
 
         if ('clear_blocks' === $action) {
-            delete_option('gratis_security_blocks');
+            WAF::clear_blocks();
             add_settings_error('gratis_security', 'blocks', __('Blokavimų žurnalas išvalytas.', 'gratis-security'), 'success');
         }
 

@@ -41,12 +41,12 @@ final class SecurityCommand {
      */
     // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- WP-CLI command signature.
     public function blocks($args, $assoc_args): void {
-        $log = get_option('gratis_security_blocks', []);
+        $log = \Gratis\Security\WAF::get_blocks(20);
         if (empty($log)) {
             \WP_CLI::log('No blocks recorded.');
             return;
         }
-        $recent = array_slice(array_reverse($log), 0, 20);
+        $recent = array_reverse($log);
         $rows   = array_map(fn($e) => [
             'Time'   => $e['time'],
             'IP'     => $e['ip'],
