@@ -1,6 +1,7 @@
 <?php declare(strict_types=1);
 namespace Gratis\Security\CLI;
 
+use Gratis\Security\FileIntegrity;
 use Gratis\Security\MalwareScanner;
 use Gratis\Security\TwoFactor;
 
@@ -52,6 +53,127 @@ final class SecurityCommand {
             'Reason' => $e['reason'],
         ], $recent);
         \WP_CLI\Utils\format_items('table', $rows, ['Time', 'IP', 'Reason']);
+    }
+
+    /**
+     * File Integrity & Monitoring commands.
+     *
+     * ## OPTIONS
+     *
+     * <subaction>
+     * : One of: status, scan, diff, baseline, instructions.
+     *
+     * [<file>]
+     * : Relative file path for `diff`.
+     *
+     * [--check-vendor]
+     * : Also verify COMPOSER-MANIFEST.sha256 during scan.
+     *
+     * ## EXAMPLES
+     *
+     *     wp gratis-security fim status
+     *     wp gratis-security fim scan
+     *     wp gratis-security fim scan --check-vendor
+     *     wp gratis-security fim diff web/app/mu-plugins/vlt-admin-menu.php
+     *     wp gratis-security fim baseline
+     *     wp gratis-security fim instructions
+     *
+     * @subcommand fim
+     * @when after_wp_load
+     *
+     * @param array<int,string>    $args       Positional args: subaction, [file].
+     * @param array<string,string> $assoc_args Associative args.
+     */
+    public function fim($args, $assoc_args): void {
+        $action = isset($args[0]) ? strtolower((string) $args[0]) : 'status';
+
+        switch ($action) {
+            case 'status':
+                $caps = FileIntegrity::detect_server_capabilities();
+                \WP_CLI::log('=== Gratis Security: Server & FIM Status ===');
+                \WP_CLI::log("OS:                {$caps['os']}");
+                \WP_CLI::log('SIMDJSON:          ' . ($caps['simdjson'] ? "Active (v{$caps['simdjson_version']})" : 'Not loaded'));
+                \WP_CLI::log('Auditd:            ' . ($caps['auditd_active'] ? 'Active' : ($caps['auditctl'] ? 'Installed' : 'Missing')));
+                \WP_CLI::log('Inotifywait:       ' . ($caps['inotifywait'] ? "Installed ({$caps['inotifywait_path']})" : 'Missing'));
+                \WP_CLI::log('Release Manifest:  ' . ($caps['has_manifests'] ? "Found ({$caps['source_manifest']})" : 'Missing'));
+                if (!empty($caps['revision'])) {
+                    \WP_CLI::log("Release Revision:  {$caps['revision']}");
+                }
+
+                $report = FileIntegrity::get_last_report();
+                if ($report) {
+                    \WP_CLI::log('-------------------------------------------');
+                    \WP_CLI::log("Last Scan:         {$report['scanned_at']}");
+                    \WP_CLI::log("Engine:            {$report['engine']}");
+                    \WP_CLI::log("Total Checked:     {$report['total_checked']}");
+                    \WP_CLI::log("Modified Files:    {$report['modified_count']}");
+                    \WP_CLI::log("Missing Files:     {$report['missing_count']}");
+                    \WP_CLI::log("Untracked Files:   {$report['untracked_count']}");
+                }
+                break;
+
+            case 'scan':
+                $check_vendor = isset($assoc_args['check-vendor']);
+                \WP_CLI::log('Running File Integrity Scan...');
+                $start = microtime(true);
+                $report = FileIntegrity::scan(['check_vendor' => $check_vendor]);
+                $elapsed = round(microtime(true) - $start, 2);
+
+                \WP_CLI::log("Checked {$report['total_checked']} files in {$elapsed}s using {$report['engine']} engine.");
+                $total_changed = $report['modified_count'] + $report['missing_count'] + $report['untracked_count'];
+
+                if (0 === $total_changed) {
+                    \WP_CLI::success('All files match their versioned signatures perfectly!');
+                    return;
+                }
+
+                \WP_CLI::warning("Found {$total_changed} changed file(s):");
+                $rows = [];
+                foreach ($report['files'] as $f) {
+                    $rows[] = [
+                        'Path'      => $f['path'],
+                        'Component' => $f['component'],
+                        'Status'    => strtoupper($f['status']),
+                        'Size'      => isset($f['size']) && $f['size'] > 0 ? size_format((int) $f['size'], 1) : '-',
+                        'Mtime'     => $f['mtime'] ?? '-',
+                    ];
+                }
+                \WP_CLI\Utils\format_items('table', $rows, ['Path', 'Component', 'Status', 'Size', 'Mtime']);
+                break;
+
+            case 'diff':
+                $file = isset($args[1]) ? (string) $args[1] : '';
+                if ('' === $file) {
+                    \WP_CLI::error('Please provide a relative file path: wp gratis-security fim diff <path>');
+                    return;
+                }
+                $diff = FileIntegrity::get_file_diff($file);
+                if (!$diff['success']) {
+                    \WP_CLI::error($diff['diff']);
+                    return;
+                }
+                \WP_CLI::log("=== Diff for: {$file} ===");
+                \WP_CLI::log($diff['info']);
+                \WP_CLI::log('-------------------------------------------');
+                \WP_CLI::log($diff['diff']);
+                break;
+
+            case 'baseline':
+                \WP_CLI::log('Rebuilding local baseline on disk...');
+                $count = FileIntegrity::build_baseline();
+                \WP_CLI::success("Saved local baseline with {$count} files into gratis-security storage (no MySQL).");
+                break;
+
+            case 'instructions':
+                $instr = FileIntegrity::get_server_instructions();
+                \WP_CLI::log("=== Red Hat / Linux Server Setup Instructions ===\n");
+                \WP_CLI::log("1. Auditd (Kernel-level monitoring):\n" . $instr['auditd'] . "\n");
+                \WP_CLI::log("2. Inotifywait (Real-time systemd service):\n" . $instr['inotify'] . "\n");
+                break;
+
+            default:
+                \WP_CLI::error("Unknown fim action '{$action}'. Use: status, scan, diff, baseline, instructions.");
+        }
     }
 
     /**

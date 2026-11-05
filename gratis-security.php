@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Gratis Security
  * Plugin URI: https://github.com/juslintek/gratis-security
- * Description: Web application firewall, login rate limiting, security headers, file-integrity monitoring, malware scanning, and TOTP 2FA. Replaces Wordfence ($119/yr).
+ * Description: Web application firewall, login rate limiting, security headers, file-integrity monitoring, malware scanning, and TOTP 2FA.
  * Version: 1.0.0
  * Requires at least: 6.4
  * Requires PHP: 8.1
@@ -33,6 +33,7 @@ add_action('send_headers', [\Gratis\Security\Headers::class, 'send'], 100);
 // Admin settings page under the Settings menu.
 add_action('admin_menu', [\Gratis\Security\Settings::class, 'register_menu']);
 add_action('admin_init', [\Gratis\Security\Settings::class, 'register_settings']);
+add_action('init', [\Gratis\Security\Settings::class, 'register_ajax']);
 
 add_action('plugins_loaded', function () {
     \Gratis\Security\LoginProtection::init();

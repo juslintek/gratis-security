@@ -53,9 +53,8 @@ final class Headers {
         ];
 
         $csp = Settings::get_string('csp', '');
-        if ('' !== $csp) {
-            $headers['Content-Security-Policy'] = $csp;
-        }
+        $csp = $csp ?: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:";
+        $headers['Content-Security-Policy'] = $csp;
 
         if (is_ssl()) {
             $headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains';
