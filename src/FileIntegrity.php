@@ -1095,9 +1095,10 @@ final class FileIntegrity {
             $web_dir = '/var/www/12fa/deploy/current/web';
         }
 
-        $auditd_cmd = "sudo auditctl -w " . escapeshellarg($web_dir) . " -p wa -k gratis_fim\n"
-            . "echo \"-w " . $web_dir . " -p wa -k gratis_fim\" | sudo tee /etc/audit/rules.d/gratis-fim.rules\n"
-            . "sudo systemctl restart auditd";
+        $audit_rule = "-a always,exit -F arch=b64 -F dir=" . $web_dir . " -F perm=wa -F key=gratis_fim";
+        $auditd_cmd = "echo " . escapeshellarg($audit_rule) . " | sudo tee /etc/audit/rules.d/gratis-fim.rules\n"
+            . "sudo augenrules --load\n"
+            . "sudo auditctl -l";
 
         $service_content = "[Unit]\n"
             . "Description=Gratis Security File Integrity Monitor\n"
@@ -1106,8 +1107,9 @@ final class FileIntegrity {
             . "Type=simple\n"
             . "User=root\n"
             . "ExecStart=/usr/bin/inotifywait -m -r -e close_write,moved_to,create,delete \\\n"
-            . "    --format '{\"time\":\"%T\",\"event\":\"%e\",\"file\":\"%w%f\"}' \\\n"
-            . "    --exclude '/(uploads|cache|\\.git)/' \\\n"
+            . "    --timefmt '%%Y-%%m-%%dT%%H:%%M:%%S%%z' \\\n"
+            . "    --format '{\"time\":\"%%T\",\"event\":\"%%e\",\"file\":\"%%w%%f\"}' \\\n"
+            . "    --exclude '/(uploads|cache|\\\\.git)/' \\\n"
             . "    " . escapeshellarg($web_dir) . "\n"
             . "StandardOutput=append:/var/log/gratis-fim.jsonl\n"
             . "Restart=always\n\n"
@@ -1117,18 +1119,23 @@ final class FileIntegrity {
         $inotify_setup = "sudo tee /etc/systemd/system/gratis-fim.service << 'EOF'\n"
             . $service_content
             . "EOF\n\n"
+            . "sudo touch /var/log/gratis-fim.jsonl\n"
+            . "sudo chmod 644 /var/log/gratis-fim.jsonl\n"
             . "sudo systemctl daemon-reload\n"
-            . "sudo systemctl enable --now gratis-fim\n"
-            . "sudo chmod 644 /var/log/gratis-fim.jsonl";
+            . "sudo systemctl enable gratis-fim\n"
+            . "sudo systemctl restart gratis-fim\n"
+            . "sudo systemctl status gratis-fim";
 
         $aide_setup = "sudo dnf install -y aide\n"
             . "sudo aide --init\n"
             . "sudo mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz\n"
             . "sudo aide --check";
 
-        $wpcli_cmd = "wp gratis-security fim scan\n"
-            . "wp gratis-security fim status\n"
-            . "wp gratis-security fim diff <file-path>";
+        $wp_path = is_dir($web_dir . '/wp') ? $web_dir . '/wp' : rtrim(ABSPATH, '/');
+        $path_flag = ' --path=' . escapeshellarg($wp_path);
+        $wpcli_cmd = "wp gratis-security fim scan" . $path_flag . "\n"
+            . "wp gratis-security fim status" . $path_flag . "\n"
+            . "wp gratis-security fim diff <file-path>" . $path_flag;
 
         return [
             'auditd'  => $auditd_cmd,
