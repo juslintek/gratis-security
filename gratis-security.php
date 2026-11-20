@@ -35,6 +35,27 @@ add_action('admin_menu', [\Gratis\Security\Settings::class, 'register_menu']);
 add_action('admin_init', [\Gratis\Security\Settings::class, 'register_settings']);
 add_action('init', [\Gratis\Security\Settings::class, 'register_ajax']);
 
+// File Integrity Monitoring & incremental log trailing cron schedules.
+add_filter('cron_schedules', static function (array $schedules): array {
+    $schedules['gratis_five_minutes'] = [
+        'interval' => 300,
+        'display'  => __('Every 5 Minutes', 'gratis-security'),
+    ];
+    return $schedules;
+});
+
+add_action(\Gratis\Security\FileIntegrity::CRON_HOOK, [\Gratis\Security\FileIntegrity::class, 'cron_scan']);
+add_action(\Gratis\Security\EventMonitor::CRON_HOOK, [\Gratis\Security\EventMonitor::class, 'trail']);
+
+add_action('init', static function (): void {
+    if (
+        \Gratis\Security\Settings::get_bool('integrity_enabled', true)
+        && !wp_next_scheduled(\Gratis\Security\EventMonitor::CRON_HOOK)
+    ) {
+        wp_schedule_event(time() + 300, 'gratis_five_minutes', \Gratis\Security\EventMonitor::CRON_HOOK);
+    }
+});
+
 add_action('plugins_loaded', function () {
     \Gratis\Security\LoginProtection::init();
     \Gratis\Security\TwoFactor::init();

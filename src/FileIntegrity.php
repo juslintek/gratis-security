@@ -179,12 +179,10 @@ final class FileIntegrity {
         }
 
         $event_log_file = null;
-        if (@file_exists(self::EVENTS_LOG_DEFAULT) && @is_readable(self::EVENTS_LOG_DEFAULT)) {
-            $event_log_file = self::EVENTS_LOG_DEFAULT;
-        } else {
-            $shared_log = dirname($root_dir, 2) . '/shared/gratis-fim.jsonl';
-            if (@file_exists($shared_log) && @is_readable($shared_log)) {
-                $event_log_file = $shared_log;
+        foreach (EventMonitor::discover_log_sources() as $source) {
+            if ('inotify' === $source['type'] && $source['exists'] && $source['readable']) {
+                $event_log_file = (string) $source['path'];
+                break;
             }
         }
 
@@ -955,6 +953,7 @@ final class FileIntegrity {
      * Executed by WP-Cron daily or hourly. Operates in pure PHP.
      */
     public static function cron_scan(): void {
+        EventMonitor::trail();
         $report = self::scan();
         $total_changed = $report['modified_count'] + $report['missing_count'] + $report['untracked_count'];
 
@@ -1084,66 +1083,13 @@ final class FileIntegrity {
     }
 
     /**
-     * Generate clear copy-paste Red Hat Enterprise Linux / Linux server setup instructions.
+     * Generate clear copy-paste Linux server setup instructions tailored to the detected host.
      *
-     * @return array<string,string>
+     * @return array<string,mixed>
      */
-    public static function get_server_instructions(): array {
-        $root = self::get_project_root();
-        $web_dir = $root . '/web';
-        if (is_dir('/var/www/12fa/deploy/current/web')) {
-            $web_dir = '/var/www/12fa/deploy/current/web';
-        }
-
-        $audit_rule = "-a always,exit -F arch=b64 -F dir=" . $web_dir . " -F perm=wa -F key=gratis_fim";
-        $auditd_cmd = "echo " . escapeshellarg($audit_rule) . " | sudo tee /etc/audit/rules.d/gratis-fim.rules\n"
-            . "sudo augenrules --load\n"
-            . "sudo auditctl -l";
-
-        $service_content = "[Unit]\n"
-            . "Description=Gratis Security File Integrity Monitor\n"
-            . "After=network.target\n\n"
-            . "[Service]\n"
-            . "Type=simple\n"
-            . "User=root\n"
-            . "ExecStart=/usr/bin/inotifywait -m -r -e close_write,moved_to,create,delete \\\n"
-            . "    --timefmt '%%Y-%%m-%%dT%%H:%%M:%%S%%z' \\\n"
-            . "    --format '{\"time\":\"%%T\",\"event\":\"%%e\",\"file\":\"%%w%%f\"}' \\\n"
-            . "    --exclude '/(uploads|cache|\\\\.git)/' \\\n"
-            . "    " . escapeshellarg($web_dir) . "\n"
-            . "StandardOutput=append:/var/log/gratis-fim.jsonl\n"
-            . "Restart=always\n\n"
-            . "[Install]\n"
-            . "WantedBy=multi-user.target\n";
-
-        $inotify_setup = "sudo tee /etc/systemd/system/gratis-fim.service << 'EOF'\n"
-            . $service_content
-            . "EOF\n\n"
-            . "sudo touch /var/log/gratis-fim.jsonl\n"
-            . "sudo chmod 644 /var/log/gratis-fim.jsonl\n"
-            . "sudo systemctl daemon-reload\n"
-            . "sudo systemctl enable gratis-fim\n"
-            . "sudo systemctl restart gratis-fim\n"
-            . "sudo systemctl status gratis-fim";
-
-        $aide_setup = "sudo dnf install -y aide\n"
-            . "sudo aide --init\n"
-            . "sudo mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz\n"
-            . "sudo aide --check";
-
-        $wp_path = is_dir($web_dir . '/wp') ? $web_dir . '/wp' : rtrim(ABSPATH, '/');
-        $path_flag = ' --path=' . escapeshellarg($wp_path);
-        $wpcli_cmd = "wp gratis-security fim scan" . $path_flag . "\n"
-            . "wp gratis-security fim status" . $path_flag . "\n"
-            . "wp gratis-security fim diff <file-path>" . $path_flag;
-
-        return [
-            'auditd'  => $auditd_cmd,
-            'inotify' => $inotify_setup,
-            'aide'    => $aide_setup,
-            'wpcli'   => $wpcli_cmd,
-            'service' => $service_content,
-        ];
+    public static function get_server_instructions(string $service_user_mode = 'php'): array {
+        $inspection = ServerInspector::inspect($service_user_mode);
+        return (array) $inspection['recommendations'];
     }
 
     /**
