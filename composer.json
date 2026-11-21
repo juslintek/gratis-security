@@ -1,0 +1,16 @@
+{
+  "name": "vialietuva/gratis-security",
+  "version": "1.0.0",
+  "description": "Gratis Security: Web Application Firewall, SIMD-accelerated File Integrity Monitoring, and Red Hat Server Shield.",
+  "type": "wordpress-plugin",
+  "license": "GPL-2.0-or-later",
+  "authors": [
+    {
+      "name": "Linas Jusys",
+      "homepage": "https://github.com/juslintek"
+    }
+  ],
+  "extra": {
+    "installer-name": "gratis-security"
+  }
+}

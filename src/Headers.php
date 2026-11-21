@@ -53,7 +53,7 @@ final class Headers {
         ];
 
         $csp = Settings::get_string('csp', '');
-        if ('' !== $csp) {
+        if ('' !== trim($csp)) {
             $headers['Content-Security-Policy'] = $csp;
         }
 
