@@ -457,6 +457,10 @@ final class EventMonitor {
 
             self::write_state_unlocked($storage, $state);
 
+            if ('cli' === PHP_SAPI) {
+                ServerInspector::refresh_cli_probe($storage);
+            }
+
             return [
                 'trailed_at'      => gmdate('c'),
                 'sources_checked' => $sources_checked,

@@ -400,6 +400,52 @@ try {
     $check_ids = array_column($insp['checks'], 'id');
     assert(in_array('wp_cli', $check_ids, true));
 
+    // 6. Multisite subsite build_recommendations() resolves canonical shared uploads/gratis-security/fim-events.jsonl
+    $ms_inspection = $base_inspection;
+    $ms_inspection['paths']['storage_dir'] = '/var/www/12fa/deploy/shared/uploads/sites/3/gratis-security';
+    $rec_ms = ServerInspector::build_recommendations($ms_inspection, 'php');
+    assert($rec_ms['log_path'] === '/var/www/12fa/deploy/shared/uploads/gratis-security/fim-events.jsonl');
+    assert(str_contains($rec_ms['service'], 'StandardOutput=append:/var/www/12fa/deploy/shared/uploads/gratis-security/fim-events.jsonl'));
+    assert(str_contains($rec_ms['service'], 'ReadWritePaths=/var/www/12fa/deploy/shared/uploads/gratis-security'));
+
+    // 7. save_probe_snapshot() / load_probe_snapshot() round-trip + multisite network fallback + expiry
+    $probe_subsite_3 = $tmp_uploads . '/sites/3/gratis-security';
+    $probe_subsite_7 = $tmp_uploads . '/sites/7/gratis-security';
+    $probe_network   = $tmp_uploads . '/gratis-security';
+    @mkdir($probe_subsite_3, 0755, true);
+    @mkdir($probe_subsite_7, 0755, true);
+
+    @unlink($probe_network . '/' . ServerInspector::PROBE_SNAPSHOT_FILE);
+
+    $snap_payload = [
+        'timestamp'  => time() - 30,
+        'auditd'     => ['status' => 'ok', 'active' => true, 'service_state' => 'active', 'dbus_denied' => false],
+        'gratis_fim' => ['status' => 'ok', 'load_state' => 'loaded', 'active_state' => 'active', 'sub_state' => 'running', 'main_pid' => 4242, 'dbus_denied' => false],
+        'processes'  => [['pid' => 4242, 'user' => 'nginx', 'cmd' => '/usr/bin/inotifywait', 'matches_web_dir' => true]],
+    ];
+    ServerInspector::save_probe_snapshot($snap_payload, $probe_subsite_3);
+
+    assert(is_file($probe_subsite_3 . '/' . ServerInspector::PROBE_SNAPSHOT_FILE));
+    assert(is_file($probe_network . '/' . ServerInspector::PROBE_SNAPSHOT_FILE));
+
+    $loaded_local = ServerInspector::load_probe_snapshot($probe_subsite_3);
+    assert(is_array($loaded_local));
+    assert($loaded_local['sapi'] === 'cli');
+    assert($loaded_local['auditd']['service_state'] === 'active');
+    assert((int) $loaded_local['gratis_fim']['main_pid'] === 4242);
+
+    // Subsite 7 has no local snapshot, falls back to network storage dir snapshot
+    $loaded_fallback = ServerInspector::load_probe_snapshot($probe_subsite_7);
+    assert(is_array($loaded_fallback));
+    assert((int) $loaded_fallback['gratis_fim']['main_pid'] === 4242);
+
+    // Expired snapshot (> PROBE_MAX_AGE_SECONDS) returns null
+    @unlink($probe_network . '/' . ServerInspector::PROBE_SNAPSHOT_FILE);
+    $expired_payload = $snap_payload;
+    $expired_payload['timestamp'] = time() - ServerInspector::PROBE_MAX_AGE_SECONDS - 60;
+    ServerInspector::save_probe_snapshot($expired_payload, $probe_subsite_7);
+    assert(ServerInspector::load_probe_snapshot($probe_subsite_7) === null);
+
     // Verify backwards compatibility of FileIntegrity::detect_server_capabilities & get_server_instructions
     $caps = FileIntegrity::detect_server_capabilities();
     foreach (['mode', 'os', 'auditctl', 'inotifywait', 'project_root', 'event_log', 'has_manifests'] as $k) {
