@@ -75,6 +75,19 @@ final class LoginProtection {
         }
 
         set_transient(self::PREFIX . md5($ip), $state, $window);
+
+        $is_lockout = $state['count'] >= $max;
+        RequestGuard::record_event([
+            'ip'              => $ip,
+            'method'          => 'POST',
+            'uri'             => '/wp-login.php',
+            'category'        => 'bruteforce',
+            'rule'            => $is_lockout ? 'login_lockout' : 'login_failed',
+            'label'           => $is_lockout ? 'Login brute-force lockout' : 'Failed login attempt',
+            'severity'        => $is_lockout ? 'high' : 'medium',
+            'action'          => $is_lockout ? 'blocked' : 'logged',
+            'matched_snippet' => "Attempt {$state['count']}/{$max}",
+        ]);
     }
 
     /**

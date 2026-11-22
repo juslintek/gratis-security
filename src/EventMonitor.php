@@ -36,7 +36,11 @@ final class EventMonitor {
 
         $storage_dir = $override_storage_dir ?? FileIntegrity::get_storage_dir();
         if ('' !== $storage_dir) {
-            $candidates[] = ['path' => rtrim($storage_dir, '/') . '/' . self::EVENTS_FILE, 'type' => 'inotify'];
+            $norm_storage = rtrim(str_replace('\\', '/', $storage_dir), '/');
+            $candidates[] = ['path' => $norm_storage . '/' . self::EVENTS_FILE, 'type' => 'inotify'];
+            if (1 === preg_match('#^(.*)/sites/\d+/gratis-security/?$#', $norm_storage, $site_m)) {
+                $candidates[] = ['path' => rtrim($site_m[1], '/') . '/gratis-security/' . self::EVENTS_FILE, 'type' => 'inotify'];
+            }
         }
 
         $candidates[] = ['path' => FileIntegrity::EVENTS_LOG_DEFAULT, 'type' => 'inotify'];
@@ -174,6 +178,13 @@ final class EventMonitor {
             || str_contains($norm, '/cache/')
             || str_starts_with($norm, 'web/app/cache/')
             || str_starts_with($norm, 'wp-content/cache/')
+            || str_contains($norm, 'elementor/css/')
+            || str_contains($norm, 'elementor/tmp/')
+            || str_contains($norm, 'wp-rocket/')
+            || str_contains($norm, 'litespeed/')
+            || str_contains($norm, 'ewww/')
+            || str_contains($norm, 'web/app/logs/')
+            || str_contains($norm, 'wp-content/logs/')
             || str_contains($norm, 'vlt-cache-logs/')
             || str_contains($norm, 'vlt-traces/')
             || str_contains($norm, '/.git/')
@@ -185,6 +196,9 @@ final class EventMonitor {
         return str_ends_with($norm, '.tmp')
             || str_ends_with($norm, '.swp')
             || str_ends_with($norm, '.swx')
+            || str_ends_with($norm, '.js.map')
+            || str_ends_with($norm, '.css.map')
+            || str_ends_with($norm, '.log')
             || str_ends_with($norm, '~');
     }
 
@@ -258,6 +272,10 @@ final class EventMonitor {
             if (isset($manifest_hashes[$manifest_key])) {
                 if ('' !== $full_path && @is_file($full_path) && @is_readable($full_path)) {
                     $actual_sha = @hash_file('sha256', $full_path);
+                    if (is_string($actual_sha) && $actual_sha === $manifest_hashes[$manifest_key]) {
+                        // File matches release manifest exactly; never fall through to runtime heuristics.
+                        return null;
+                    }
                     if (is_string($actual_sha) && $actual_sha !== $manifest_hashes[$manifest_key]) {
                         return self::make_detection(
                             $event,
@@ -267,18 +285,32 @@ final class EventMonitor {
                             'File SHA-256 differs from release manifest'
                         );
                     }
+                } elseif (str_contains($event_upper, 'DELETE') && ('' === $full_path || !@file_exists($full_path))) {
+                    return self::make_detection(
+                        $event,
+                        'high',
+                        'manifest_missing',
+                        'Tracked manifest file deleted',
+                        'File listed in release manifest was deleted'
+                    );
                 }
-            } elseif (
-                $is_write
-                && 1 === preg_match('/\.(php[0-9]?|phtml|phar|pht|shtml|cgi|sh)$/i', $rel_path)
-            ) {
-                return self::make_detection(
-                    $event,
-                    'high',
-                    'untracked_executable',
-                    'Untracked executable outside manifest',
-                    'New executable file outside release manifest'
-                );
+            } else {
+                if (str_contains($event_upper, 'DELETE') && ('' === $full_path || !@file_exists($full_path))) {
+                    // Ephemeral/temp file outside manifest cleaned up.
+                    return null;
+                }
+                if (
+                    $is_write
+                    && 1 === preg_match('/\.(php[0-9]?|phtml|phar|pht|shtml|cgi|sh)$/i', $rel_path)
+                ) {
+                    return self::make_detection(
+                        $event,
+                        'high',
+                        'untracked_executable',
+                        'Untracked executable outside manifest',
+                        'New executable file outside release manifest'
+                    );
+                }
             }
         }
 
@@ -469,8 +501,11 @@ final class EventMonitor {
             $source_filter = '';
         }
         $only_suspicious = !empty($filters['only_suspicious']);
-        $limit           = isset($filters['limit']) ? (int) $filters['limit'] : 100;
-        $limit           = max(1, min(500, $limit));
+        $page            = isset($filters['page']) ? max(1, (int) $filters['page']) : 1;
+        $per_page_raw    = isset($filters['per_page'])
+            ? ((int) $filters['per_page'] > 0 ? (int) $filters['per_page'] : 20)
+            : (isset($filters['limit']) ? (int) $filters['limit'] : 100);
+        $per_page        = max(1, min(500, $per_page_raw));
 
         $cutoff_ts = match ($since) {
             '15m' => time() - 900,
@@ -532,10 +567,18 @@ final class EventMonitor {
 
         usort($matched, static fn(array $a, array $b): int => ((int) $b['timestamp']) <=> ((int) $a['timestamp']));
 
+        $total_filtered = count($matched);
+        $total_pages    = $total_filtered > 0 ? (int) ceil($total_filtered / $per_page) : 1;
+        $offset         = ($page - 1) * $per_page;
+
         return [
-            'events'        => array_slice($matched, 0, $limit),
-            'total_matched' => count($matched),
-            'sources'       => $used_sources,
+            'events'         => array_slice($matched, $offset, $per_page),
+            'total_matched'  => $total_filtered,
+            'total_filtered' => $total_filtered,
+            'page'           => $page,
+            'per_page'       => $per_page,
+            'total_pages'    => $total_pages,
+            'sources'        => $used_sources,
         ];
     }
 
@@ -570,50 +613,32 @@ final class EventMonitor {
             }
         }
 
-        $sev_filter  = strtolower(trim((string) ($filters['severity'] ?? '')));
-        $stat_filter = strtolower(trim((string) ($filters['status'] ?? '')));
-        $comp_filter = strtolower(trim((string) ($filters['component'] ?? '')));
-        $search      = strtolower(trim((string) ($filters['search'] ?? '')));
-        if ('all' === $sev_filter) {
-            $sev_filter = '';
-        }
-        if ('all' === $stat_filter) {
-            $stat_filter = '';
-        }
-        if ('all' === $comp_filter) {
-            $comp_filter = '';
-        }
-        $limit       = isset($filters['limit']) ? (int) $filters['limit'] : 100;
-        $limit       = max(1, min(500, $limit));
+        $parsed_filters = self::parse_detection_filters($filters);
+        $page           = isset($filters['page']) ? max(1, (int) $filters['page']) : 1;
+        $per_page_raw   = isset($filters['per_page'])
+            ? ((int) $filters['per_page'] > 0 ? (int) $filters['per_page'] : 20)
+            : (isset($filters['limit']) ? (int) $filters['limit'] : 100);
+        $per_page       = max(1, min(500, $per_page_raw));
 
         $filtered = [];
         foreach (array_reverse($all) as $det) {
-            if ('' !== $sev_filter && strtolower((string) ($det['severity'] ?? '')) !== $sev_filter) {
+            if (!self::matches_detection_filters($det, $parsed_filters)) {
                 continue;
-            }
-            if ('' !== $stat_filter && strtolower((string) ($det['status'] ?? '')) !== $stat_filter) {
-                continue;
-            }
-            if ('' !== $comp_filter && strtolower((string) ($det['component'] ?? '')) !== $comp_filter) {
-                continue;
-            }
-            if ('' !== $search) {
-                $hay = strtolower(
-                    ($det['path'] ?? '') . ' ' . ($det['rule'] ?? '') . ' ' . ($det['title'] ?? '') . ' ' . ($det['details'] ?? '')
-                );
-                if (!str_contains($hay, $search)) {
-                    continue;
-                }
             }
             $filtered[] = $det;
-            if (count($filtered) >= $limit) {
-                break;
-            }
         }
 
+        $total_filtered = count($filtered);
+        $total_pages    = $total_filtered > 0 ? (int) ceil($total_filtered / $per_page) : 1;
+        $offset         = ($page - 1) * $per_page;
+
         return [
-            'detections' => $filtered,
-            'counts'     => $counts,
+            'detections'     => array_slice($filtered, $offset, $per_page),
+            'counts'         => $counts,
+            'total_filtered' => $total_filtered,
+            'page'           => $page,
+            'per_page'       => $per_page,
+            'total_pages'    => $total_pages,
         ];
     }
 
@@ -698,6 +723,172 @@ final class EventMonitor {
                 @fclose($lock_fp);
             }
         }
+    }
+
+    /**
+     * Bulk update status for all detections matching the provided filters under LOCK_EX.
+     *
+     * @param array<string,mixed> $filters
+     */
+    public static function bulk_update_status(array $filters, string $new_status, ?string $storage_dir = null): int {
+        if (!in_array($new_status, ['open', 'acknowledged', 'resolved'], true)) {
+            return 0;
+        }
+
+        $storage        = $storage_dir ?? FileIntegrity::get_storage_dir();
+        $parsed_filters = self::parse_detection_filters($filters);
+        self::ensure_dir($storage);
+
+        $lock_fp = @fopen($storage . '/fim-trail.lock', 'c+');
+        if ($lock_fp) {
+            @flock($lock_fp, LOCK_EX);
+        }
+
+        try {
+            $all     = self::read_all_detections_unlocked($storage);
+            $updated = 0;
+            $now_iso = gmdate('c');
+
+            foreach ($all as &$det) {
+                if (!self::matches_detection_filters($det, $parsed_filters)) {
+                    continue;
+                }
+                if (($det['status'] ?? 'open') !== $new_status) {
+                    $det['status']     = $new_status;
+                    $det['updated_at'] = $now_iso;
+                    ++$updated;
+                }
+            }
+            unset($det);
+
+            if ($updated > 0) {
+                self::write_all_detections_unlocked($storage, $all);
+            }
+            return $updated;
+        } finally {
+            if ($lock_fp) {
+                @flock($lock_fp, LOCK_UN);
+                @fclose($lock_fp);
+            }
+        }
+    }
+
+    /**
+     * Purge stored detections that are now verified clean against ignored paths,
+     * release manifest SHA-256 hashes, or cleaned-up untracked deleted temp files.
+     *
+     * @return array{removed:int,remaining:int}
+     */
+    public static function purge_verified_detections(?string $project_root = null, ?string $storage_dir = null): array {
+        $root     = $project_root ?? FileIntegrity::get_project_root();
+        $storage  = $storage_dir ?? FileIntegrity::get_storage_dir();
+        $manifest = self::load_manifest_hashes($root);
+        self::ensure_dir($storage);
+
+        $lock_fp = @fopen($storage . '/fim-trail.lock', 'c+');
+        if ($lock_fp) {
+            @flock($lock_fp, LOCK_EX);
+        }
+
+        try {
+            $all     = self::read_all_detections_unlocked($storage);
+            $kept    = [];
+            $removed = 0;
+
+            foreach ($all as $det) {
+                $path = (string) ($det['path'] ?? '');
+                $rule = (string) ($det['rule'] ?? '');
+                $ev   = strtoupper((string) ($det['event'] ?? ''));
+                $rel  = ltrim(str_replace('\\', '/', $path), '/');
+
+                $drop = false;
+                if (self::is_ignored_path($path)) {
+                    $drop = true;
+                } elseif (
+                    in_array($rule, ['code_modified_runtime', 'manifest_drift'], true)
+                    && is_array($manifest)
+                    && '' !== $rel
+                    && isset($manifest[$rel])
+                ) {
+                    $full = self::resolve_full_path($det, $root);
+                    if ('' !== $full && @is_file($full) && @is_readable($full)) {
+                        $actual_sha = @hash_file('sha256', $full);
+                        if (is_string($actual_sha) && $actual_sha === $manifest[$rel]) {
+                            $drop = true;
+                        }
+                    }
+                } elseif ('code_modified_runtime' === $rule && str_contains($ev, 'DELETE')) {
+                    $in_manifest = is_array($manifest) && '' !== $rel && isset($manifest[$rel]);
+                    $full        = self::resolve_full_path($det, $root);
+                    if (!$in_manifest && '' === $full) {
+                        $drop = true;
+                    }
+                }
+
+                if ($drop) {
+                    ++$removed;
+                } else {
+                    $kept[] = $det;
+                }
+            }
+
+            if ($removed > 0) {
+                self::write_all_detections_unlocked($storage, $kept);
+            }
+
+            return [
+                'removed'   => $removed,
+                'remaining' => count($kept),
+            ];
+        } finally {
+            if ($lock_fp) {
+                @flock($lock_fp, LOCK_UN);
+                @fclose($lock_fp);
+            }
+        }
+    }
+
+    /**
+     * @param array<string,mixed> $filters
+     * @return array{severity:string,status:string,component:string,search:string}
+     */
+    private static function parse_detection_filters(array $filters): array {
+        $sev  = strtolower(trim((string) ($filters['severity'] ?? '')));
+        $stat = strtolower(trim((string) ($filters['status'] ?? '')));
+        $comp = strtolower(trim((string) ($filters['component'] ?? '')));
+        $srch = strtolower(trim((string) ($filters['search'] ?? '')));
+
+        return [
+            'severity'  => 'all' === $sev ? '' : $sev,
+            'status'    => 'all' === $stat ? '' : $stat,
+            'component' => 'all' === $comp ? '' : $comp,
+            'search'    => $srch,
+        ];
+    }
+
+    /**
+     * @param array<string,mixed>                                        $det
+     * @param array{severity:string,status:string,component:string,search:string} $filters
+     */
+    private static function matches_detection_filters(array $det, array $filters): bool {
+        if ('' !== $filters['severity'] && strtolower((string) ($det['severity'] ?? '')) !== $filters['severity']) {
+            return false;
+        }
+        if ('' !== $filters['status'] && strtolower((string) ($det['status'] ?? '')) !== $filters['status']) {
+            return false;
+        }
+        if ('' !== $filters['component'] && strtolower((string) ($det['component'] ?? '')) !== $filters['component']) {
+            return false;
+        }
+        if ('' !== $filters['search']) {
+            $hay = strtolower(
+                ($det['path'] ?? '') . ' ' . ($det['rule'] ?? '') . ' ' . ($det['title'] ?? '') . ' ' . ($det['details'] ?? '')
+            );
+            if (!str_contains($hay, $filters['search'])) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
