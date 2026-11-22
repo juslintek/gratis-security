@@ -10,6 +10,9 @@ defined('ABSPATH') || exit;
  */
 final class ServerInspector {
 
+    public const PROBE_SNAPSHOT_FILE = 'server-probe.json';
+    public const PROBE_MAX_AGE_SECONDS = 86400;
+
     /**
      * Detect PHP runtime user, group, SAPI, and SELinux state.
      *
@@ -528,10 +531,14 @@ final class ServerInspector {
 
         $web_dir      = (string) ($paths['web_dir'] ?? self::get_web_dir());
         $wp_path      = (string) ($paths['wp_path'] ?? self::get_wp_path($web_dir));
-        $storage_dir  = (string) ($paths['storage_dir'] ?? FileIntegrity::get_storage_dir());
+        $raw_storage  = (string) ($paths['storage_dir'] ?? FileIntegrity::get_storage_dir());
+        $storage_dir  = self::resolve_network_storage_dir($raw_storage);
         $storage_real = @realpath($storage_dir);
         if (!is_string($storage_real) || '' === $storage_real) {
-            $storage_real = $storage_dir;
+            $parent_real  = @realpath(dirname($storage_dir));
+            $storage_real = (is_string($parent_real) && '' !== $parent_real)
+                ? (rtrim($parent_real, '/') . '/' . basename($storage_dir))
+                : $storage_dir;
         }
         $symlink_info = (array) ($paths['symlink_deploy'] ?? self::is_symlink_deploy($web_dir));
 
@@ -682,6 +689,170 @@ final class ServerInspector {
     }
 
     /**
+     * Resolve the canonical network-wide storage directory for multisite installations.
+     */
+    private static function resolve_network_storage_dir(?string $storage_dir = null): string {
+        $dir = str_replace('\\', '/', $storage_dir ?? FileIntegrity::get_storage_dir());
+        if (1 === preg_match('#^(.*)/sites/\d+/gratis-security/?$#', $dir, $matches)) {
+            return rtrim($matches[1], '/') . '/gratis-security';
+        }
+        return rtrim($dir, '/');
+    }
+
+    private static function is_dbus_denied(string $output): bool {
+        $lower = strtolower($output);
+        foreach ([
+            'permission denied',
+            'failed to connect to bus',
+            'access denied',
+            'system has not been booted',
+            'operation not permitted',
+        ] as $needle) {
+            if (str_contains($lower, $needle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static function atomic_write_file(string $target, string $content): void {
+        $dir = dirname($target);
+        if (!@is_dir($dir)) {
+            if (function_exists('wp_mkdir_p')) {
+                wp_mkdir_p($dir);
+            } else {
+                @mkdir($dir, 0755, true);
+            }
+        }
+        if (!@is_dir($dir) || !@is_writable($dir)) {
+            return;
+        }
+        $tmp = @tempnam($dir, 'gs_probe_');
+        if (false === $tmp) {
+            @file_put_contents($target, $content, LOCK_EX);
+            return;
+        }
+        if (false !== @file_put_contents($tmp, $content, LOCK_EX)) {
+            @chmod($tmp, 0644);
+            if (!@rename($tmp, $target)) {
+                @unlink($tmp);
+                @file_put_contents($target, $content, LOCK_EX);
+            }
+        } else {
+            @unlink($tmp);
+        }
+    }
+
+    /**
+     * Persist a CLI-probed server snapshot atomically so PHP-FPM can verify systemd/auditd under SELinux httpd_t.
+     *
+     * @param array<string,mixed> $data
+     */
+    public static function save_probe_snapshot(array $data, ?string $storage_dir = null): void {
+        $dir = rtrim(str_replace('\\', '/', $storage_dir ?? FileIntegrity::get_storage_dir()), '/');
+        if ('' === $dir) {
+            return;
+        }
+
+        $payload = [
+            'probed_at'  => (string) ($data['probed_at'] ?? gmdate('c')),
+            'timestamp'  => (int) ($data['timestamp'] ?? time()),
+            'sapi'       => (string) ($data['sapi'] ?? PHP_SAPI),
+            'auditd'     => (array) ($data['auditd'] ?? []),
+            'gratis_fim' => (array) ($data['gratis_fim'] ?? []),
+            'processes'  => (array) ($data['processes'] ?? []),
+        ];
+        $json = FileIntegrity::simd_encode($payload);
+
+        self::atomic_write_file($dir . '/' . self::PROBE_SNAPSHOT_FILE, $json);
+
+        if ('cli' === PHP_SAPI) {
+            $network_dir = self::resolve_network_storage_dir($dir);
+            if (
+                $network_dir !== $dir
+                && '' !== $network_dir
+                && (@is_writable($network_dir) || (!@is_dir($network_dir) && @is_writable(dirname($network_dir))))
+            ) {
+                self::atomic_write_file($network_dir . '/' . self::PROBE_SNAPSHOT_FILE, $json);
+            }
+        }
+    }
+
+    /**
+     * Load the newest non-expired CLI probe snapshot from local or multisite network storage.
+     *
+     * @return array<string,mixed>|null
+     */
+    public static function load_probe_snapshot(?string $storage_dir = null): ?array {
+        $dir         = rtrim(str_replace('\\', '/', $storage_dir ?? FileIntegrity::get_storage_dir()), '/');
+        $network_dir = self::resolve_network_storage_dir($dir);
+
+        $candidates = [];
+        if ('' !== $dir) {
+            $candidates[] = $dir . '/' . self::PROBE_SNAPSHOT_FILE;
+        }
+        if ('' !== $network_dir && $network_dir !== $dir) {
+            $candidates[] = $network_dir . '/' . self::PROBE_SNAPSHOT_FILE;
+        }
+
+        $now  = time();
+        $best = null;
+        $best_ts = 0;
+
+        foreach ($candidates as $path) {
+            if (!@is_file($path) || !@is_readable($path)) {
+                continue;
+            }
+            $raw = @file_get_contents($path);
+            if (!is_string($raw) || '' === trim($raw)) {
+                continue;
+            }
+            $snap = FileIntegrity::simd_decode($raw, true);
+            if (!is_array($snap)) {
+                continue;
+            }
+            $ts = (int) ($snap['timestamp'] ?? 0);
+            if ($ts <= 0 || ($now - $ts) > self::PROBE_MAX_AGE_SECONDS) {
+                continue;
+            }
+            if (null === $best || $ts > $best_ts) {
+                $best    = $snap;
+                $best_ts = $ts;
+            }
+        }
+
+        return $best;
+    }
+
+    /**
+     * Refresh the CLI probe snapshot when executed from CLI (e.g. cron trail).
+     */
+    public static function refresh_cli_probe(?string $storage_dir = null): void {
+        if ('cli' !== PHP_SAPI) {
+            return;
+        }
+        $can_shell = FileIntegrity::is_shell_available();
+        $runtime   = self::detect_runtime();
+        $selinux   = (string) ($runtime['selinux'] ?? 'unknown');
+        $tools     = self::detect_tools($can_shell);
+        $web_dir   = self::get_web_dir();
+        $processes = self::detect_processes($web_dir, $can_shell);
+        $auditd    = self::inspect_auditd($tools, $web_dir, $can_shell, $selinux);
+        $fim_svc   = self::inspect_gratis_fim_service($tools, $web_dir, $processes, $can_shell, $selinux);
+
+        if (empty($auditd['dbus_denied']) || empty($fim_svc['dbus_denied'])) {
+            self::save_probe_snapshot(
+                [
+                    'auditd'     => $auditd,
+                    'gratis_fim' => $fim_svc,
+                    'processes'  => $processes,
+                ],
+                $storage_dir
+            );
+        }
+    }
+
+    /**
      * Run a full live server inspection and attach recommendations.
      *
      * @return array<string,mixed>
@@ -748,11 +919,29 @@ final class ServerInspector {
             'path'   => $wp_cli_yml_path,
         ];
 
+        $selinux      = (string) ($runtime['selinux'] ?? 'unknown');
+        $log_readable = !empty($primary_log['readable']);
+        $snapshot     = ('cli' !== PHP_SAPI) ? self::load_probe_snapshot($storage_dir) : null;
+
         $processes = self::detect_processes($web_dir, $can_shell);
-        $auditd    = self::inspect_auditd($tools, $web_dir, $can_shell);
-        $fim_svc   = self::inspect_gratis_fim_service($tools, $web_dir, $processes, $can_shell);
+        $auditd    = self::inspect_auditd($tools, $web_dir, $can_shell, $selinux, $snapshot);
+        $fim_svc   = self::inspect_gratis_fim_service($tools, $web_dir, $processes, $can_shell, $selinux, $snapshot, $log_readable);
+        if (empty($processes) && !empty($fim_svc['verified_via_probe']) && is_array($snapshot) && !empty($snapshot['processes']) && is_array($snapshot['processes'])) {
+            $processes = $snapshot['processes'];
+        }
         $manifests = self::inspect_manifests($root_dir, $tools, $can_shell);
         $cron      = self::inspect_cron($can_shell);
+
+        if ('cli' === PHP_SAPI && (empty($auditd['dbus_denied']) || empty($fim_svc['dbus_denied']))) {
+            self::save_probe_snapshot(
+                [
+                    'auditd'     => $auditd,
+                    'gratis_fim' => $fim_svc,
+                    'processes'  => $processes,
+                ],
+                $storage_dir
+            );
+        }
 
         $checks  = self::build_checks($os, $tools, $auditd, $fim_svc, $primary_log, $manifests, $cron, $wp_cli_yml);
         $summary = self::summarize_checks($checks);
@@ -811,18 +1000,23 @@ final class ServerInspector {
     }
 
     /**
-     * @param array<string,mixed> $tools
+     * @param array<string,mixed>      $tools
+     * @param array<string,mixed>|null $snapshot
      * @return array<string,mixed>
      */
-    private static function inspect_auditd(array $tools, string $web_dir, bool $can_shell): array {
-        $installed = !empty($tools['auditctl']['available']);
-        $active    = false;
-        $svc_state = 'unknown';
+    private static function inspect_auditd(array $tools, string $web_dir, bool $can_shell, string $selinux = 'unknown', ?array $snapshot = null): array {
+        $installed   = !empty($tools['auditctl']['available']);
+        $active      = false;
+        $svc_state   = 'unknown';
+        $dbus_denied = false;
 
         if ($can_shell && !empty($tools['systemctl']['available'])) {
-            $out = @shell_exec('systemctl is-active auditd 2>/dev/null');
-            if (is_string($out) && '' !== trim($out)) {
-                $svc_state = trim($out);
+            $out     = @shell_exec('systemctl is-active auditd 2>&1');
+            $trimmed = is_string($out) ? trim($out) : '';
+            if (self::is_dbus_denied($trimmed) || ('' === $trimmed && 'enforcing' === $selinux && 'cli' !== PHP_SAPI)) {
+                $dbus_denied = true;
+            } elseif ('' !== $trimmed) {
+                $svc_state = $trimmed;
                 $active    = ('active' === $svc_state);
             }
         }
@@ -839,10 +1033,28 @@ final class ServerInspector {
         $kernel_analysis = null;
         if ($can_shell && $installed) {
             $auditctl_bin = (string) ($tools['auditctl']['path'] ?? 'auditctl');
-            $out = @shell_exec(escapeshellarg($auditctl_bin) . ' -l 2>/dev/null');
-            if (is_string($out) && '' !== trim($out) && !str_contains(strtolower($out), 'must be root') && !str_contains(strtolower($out), 'permission denied')) {
+            $out = @shell_exec(escapeshellarg($auditctl_bin) . ' -l 2>&1');
+            if (is_string($out) && '' !== trim($out) && !str_contains(strtolower($out), 'must be root') && !self::is_dbus_denied($out)) {
                 $kernel_checked  = true;
                 $kernel_analysis = self::analyze_audit_rules($out, $web_dir);
+            }
+        }
+
+        $used_snapshot = false;
+        if ($dbus_denied && is_array($snapshot) && !empty($snapshot['auditd']) && is_array($snapshot['auditd'])) {
+            $snap_audit = $snapshot['auditd'];
+            if (empty($snap_audit['dbus_denied']) && ('unknown' !== ($snap_audit['service_state'] ?? 'unknown') || !empty($snap_audit['active']))) {
+                $active    = !empty($snap_audit['active']);
+                $svc_state = (string) ($snap_audit['service_state'] ?? 'unknown');
+                if (!$kernel_checked && !empty($snap_audit['kernel_rules_checked'])) {
+                    $kernel_checked  = true;
+                    $kernel_analysis = is_array($snap_audit['kernel_rules_analysis'] ?? null) ? $snap_audit['kernel_rules_analysis'] : null;
+                }
+                if (!$rules_file_readable && !empty($snap_audit['rules_file_readable'])) {
+                    $rules_file_readable = true;
+                    $rules_file_analysis = is_array($snap_audit['rules_file_analysis'] ?? null) ? $snap_audit['rules_file_analysis'] : null;
+                }
+                $used_snapshot = true;
             }
         }
 
@@ -850,7 +1062,10 @@ final class ServerInspector {
         $summary = 'auditd is not installed';
         $active_analysis = $kernel_analysis ?? $rules_file_analysis;
 
-        if ($installed && $active) {
+        if ($installed && $dbus_denied && !$used_snapshot) {
+            $status  = 'unverifiable';
+            $summary = 'SELinux enforcing (httpd_t) blocks systemctl/auditctl in PHP-FPM; verify via CLI (wp gratis-security wizard) or cron';
+        } elseif ($installed && $active) {
             if (is_array($active_analysis) && !empty($active_analysis['has_rule']) && empty($active_analysis['issues'])) {
                 $status  = 'ok';
                 $summary = 'auditd active with valid gratis_fim rule';
@@ -869,6 +1084,10 @@ final class ServerInspector {
             $summary = "auditd installed (service state: {$svc_state})";
         }
 
+        if ($used_snapshot) {
+            $summary .= ' (verified via CLI probe)';
+        }
+
         return [
             'installed'             => $installed,
             'active'                => $active,
@@ -878,17 +1097,28 @@ final class ServerInspector {
             'rules_file_analysis'   => $rules_file_analysis,
             'kernel_rules_checked'  => $kernel_checked,
             'kernel_rules_analysis' => $kernel_analysis,
+            'dbus_denied'           => $dbus_denied,
+            'verified_via_probe'    => $used_snapshot,
             'status'                => $status,
             'summary'               => $summary,
         ];
     }
 
     /**
-     * @param array<string,mixed> $tools
+     * @param array<string,mixed>            $tools
      * @param array<int,array<string,mixed>> $processes
+     * @param array<string,mixed>|null       $snapshot
      * @return array<string,mixed>
      */
-    private static function inspect_gratis_fim_service(array $tools, string $web_dir, array $processes, bool $can_shell): array {
+    private static function inspect_gratis_fim_service(
+        array $tools,
+        string $web_dir,
+        array $processes,
+        bool $can_shell,
+        string $selinux = 'unknown',
+        ?array $snapshot = null,
+        bool $log_readable = false
+    ): array {
         $unit_path   = '/etc/systemd/system/gratis-fim.service';
         $unit_exists = @file_exists($unit_path);
         $unit_analysis = null;
@@ -904,11 +1134,15 @@ final class ServerInspector {
         $active_state = 'unknown';
         $sub_state    = 'unknown';
         $main_pid     = 0;
+        $dbus_denied  = false;
 
         if ($can_shell && !empty($tools['systemctl']['available'])) {
-            $show = @shell_exec('systemctl show gratis-fim.service --property=LoadState,ActiveState,SubState,MainPID,User --no-pager 2>/dev/null');
-            if (is_string($show) && '' !== trim($show)) {
-                foreach (preg_split('/\r?\n/', trim($show)) ?: [] as $line) {
+            $show    = @shell_exec('systemctl show gratis-fim.service --property=LoadState,ActiveState,SubState,MainPID,User --no-pager 2>&1');
+            $trimmed = is_string($show) ? trim($show) : '';
+            if (self::is_dbus_denied($trimmed) || ('' === $trimmed && 'enforcing' === $selinux && 'cli' !== PHP_SAPI)) {
+                $dbus_denied = true;
+            } elseif ('' !== $trimmed) {
+                foreach (preg_split('/\r?\n/', $trimmed) ?: [] as $line) {
                     if (!str_contains($line, '=')) {
                         continue;
                     }
@@ -932,7 +1166,39 @@ final class ServerInspector {
             }
         }
 
-        $process_running = !empty($processes) || $main_pid > 0;
+        $used_snapshot = false;
+        if ($dbus_denied && is_array($snapshot) && !empty($snapshot['gratis_fim']) && is_array($snapshot['gratis_fim'])) {
+            $snap_fim = $snapshot['gratis_fim'];
+            if (
+                empty($snap_fim['dbus_denied'])
+                && (
+                    'unknown' !== ($snap_fim['load_state'] ?? 'unknown')
+                    || 'unknown' !== ($snap_fim['active_state'] ?? 'unknown')
+                    || !empty($snap_fim['process_running'])
+                    || !empty($snapshot['processes'])
+                )
+            ) {
+                $load_state   = (string) ($snap_fim['load_state'] ?? $load_state);
+                $active_state = (string) ($snap_fim['active_state'] ?? $active_state);
+                $sub_state    = (string) ($snap_fim['sub_state'] ?? $sub_state);
+                $main_pid     = (int) ($snap_fim['main_pid'] ?? $main_pid);
+                if (!empty($snap_fim['unit_exists'])) {
+                    $unit_exists = true;
+                }
+                if ('' === $unit_user && !empty($snap_fim['unit_user'])) {
+                    $unit_user = (string) $snap_fim['unit_user'];
+                }
+                if (null === $unit_analysis && is_array($snap_fim['unit_analysis'] ?? null)) {
+                    $unit_analysis = $snap_fim['unit_analysis'];
+                }
+                if (empty($processes) && !empty($snapshot['processes']) && is_array($snapshot['processes'])) {
+                    $processes = $snapshot['processes'];
+                }
+                $used_snapshot = true;
+            }
+        }
+
+        $process_running = !empty($processes) || $main_pid > 0 || ($used_snapshot && !empty($snapshot['gratis_fim']['process_running']));
         $status  = 'missing';
         $summary = 'gratis-fim.service not configured';
 
@@ -950,6 +1216,20 @@ final class ServerInspector {
             $summary  = !empty($matching)
                 ? 'inotifywait process running for web directory'
                 : 'inotifywait process running, but watched path does not match web directory';
+        } elseif ($dbus_denied && !$used_snapshot) {
+            if ($unit_exists && is_array($unit_analysis) && !empty($unit_analysis['issues'])) {
+                $status  = 'warn';
+                $summary = 'Unit warnings: ' . implode('; ', $unit_analysis['issues']);
+            } elseif ($unit_exists && is_array($unit_analysis) && empty($unit_analysis['issues']) && $log_readable) {
+                $status  = 'ok';
+                $summary = 'Unit valid and event log readable (systemd status hidden by SELinux httpd_t)';
+            } elseif ($unit_exists) {
+                $status  = 'unverifiable';
+                $summary = 'Unit exists, but SELinux enforcing (httpd_t) blocks systemctl D-Bus in PHP-FPM';
+            } else {
+                $status  = 'unverifiable';
+                $summary = 'SELinux enforcing (httpd_t) blocks systemctl D-Bus in PHP-FPM; verify via CLI (wp gratis-security wizard) or cron';
+            }
         } elseif ($unit_exists || 'loaded' === $load_state) {
             $status  = 'warn';
             $summary = "Unit exists (state: {$active_state}/{$sub_state})";
@@ -958,18 +1238,24 @@ final class ServerInspector {
             }
         }
 
+        if ($used_snapshot) {
+            $summary .= ' (verified via CLI probe)';
+        }
+
         return [
-            'unit_exists'     => $unit_exists,
-            'unit_path'       => $unit_path,
-            'unit_analysis'   => $unit_analysis,
-            'load_state'      => $load_state,
-            'active_state'    => $active_state,
-            'sub_state'       => $sub_state,
-            'main_pid'        => $main_pid,
-            'unit_user'       => $unit_user,
-            'process_running' => $process_running,
-            'status'          => $status,
-            'summary'         => $summary,
+            'unit_exists'        => $unit_exists,
+            'unit_path'          => $unit_path,
+            'unit_analysis'      => $unit_analysis,
+            'load_state'         => $load_state,
+            'active_state'       => $active_state,
+            'sub_state'          => $sub_state,
+            'main_pid'           => $main_pid,
+            'unit_user'          => $unit_user,
+            'process_running'    => $process_running,
+            'dbus_denied'        => $dbus_denied,
+            'verified_via_probe' => $used_snapshot,
+            'status'             => $status,
+            'summary'            => $summary,
         ];
     }
 
@@ -1331,9 +1617,13 @@ final class ServerInspector {
         // Step 3: gratis-fim.service
         $fim_status_raw = (string) ($services['gratis_fim']['status'] ?? 'missing');
         $log_readable   = !empty($paths['event_log']['readable']);
-        $fim_step_status = ('ok' === $fim_status_raw && $log_readable)
-            ? 'done'
-            : ('autonomous_php' === $tier ? 'optional' : 'action_needed');
+        if ('ok' === $fim_status_raw && $log_readable) {
+            $fim_step_status = 'done';
+        } elseif ('unverifiable' === $fim_status_raw && 'autonomous_php' !== $tier) {
+            $fim_step_status = 'manual_verify';
+        } else {
+            $fim_step_status = ('autonomous_php' === $tier ? 'optional' : 'action_needed');
+        }
         $steps[] = [
             'id'      => 'configure_service',
             'title'   => 'Install gratis-fim systemd service',

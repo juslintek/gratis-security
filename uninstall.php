@@ -13,6 +13,8 @@ global $wpdb;
 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", 'gratis_security_%'));
 
-// Clear scheduled FIM cron events.
+// Clear scheduled security cron events.
 wp_clear_scheduled_hook('gratis_security_fim_cron_scan');
 wp_clear_scheduled_hook('gratis_security_fim_trail_cron');
+wp_clear_scheduled_hook('gratis_security_malware_cron_scan');
+wp_clear_scheduled_hook('gratis_security_signature_update_cron');

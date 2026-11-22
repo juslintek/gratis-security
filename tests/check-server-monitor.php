@@ -232,12 +232,47 @@ try {
     ]) . "\n";
     file_put_contents($log_file, $events_jsonl);
 
+    // Direct evaluate_event check: manifest-verified file MUST return null (no code_modified_runtime fallthrough)
+    $manifest_map = [
+        'web/app/plugins/demo-plugin/ok.php'      => hash_file('sha256', $plugin_match),
+        'web/app/plugins/demo-plugin/changed.php' => str_repeat('0', 64),
+    ];
+    $ok_eval = EventMonitor::evaluate_event([
+        'time'      => $ts1,
+        'event'     => 'CLOSE_WRITE,CLOSE',
+        'raw_path'  => $plugin_match,
+        'path'      => 'web/app/plugins/demo-plugin/ok.php',
+        'component' => 'plugins',
+    ], $tmp_root, $manifest_map);
+    assert($ok_eval === null);
+
+    // Ephemeral untracked file DELETE outside manifest must return null
+    $del_eval = EventMonitor::evaluate_event([
+        'time'      => $ts1,
+        'event'     => 'DELETE',
+        'raw_path'  => $tmp_web . '/app/plugins/demo-plugin/ephemeral.php',
+        'path'      => 'web/app/plugins/demo-plugin/ephemeral.php',
+        'component' => 'plugins',
+    ], $tmp_root, $manifest_map);
+    assert($del_eval === null);
+
+    // Expanded ignored paths
+    assert(EventMonitor::is_ignored_path('web/app/uploads/elementor/css/post-12.css') === true);
+    assert(EventMonitor::is_ignored_path('web/app/cache/wp-rocket/index.html') === true);
+    assert(EventMonitor::is_ignored_path('web/app/plugins/foo/app.min.js.map') === true);
+    assert(EventMonitor::is_ignored_path('web/app/logs/debug.log') === true);
+
+    // Multisite storage log discovery fallback
+    $ms_sources = EventMonitor::discover_log_sources($tmp_uploads . '/sites/3/gratis-security');
+    $ms_paths   = array_column($ms_sources, 'path');
+    assert(in_array($tmp_uploads . '/gratis-security/fim-events.jsonl', $ms_paths, true));
+
     $trail1 = EventMonitor::trail([$log_file], $tmp_storage, $tmp_root);
     assert($trail1['sources_checked'] === 1);
     assert($trail1['lines_read'] === 6);
     assert($trail1['events_parsed'] === 6);
-    // Expected detections: shell.php (critical), version.php (high), changed.php (manifest_drift, high), ok.php (code_modified_runtime, medium) -> 4
-    assert($trail1['new_detections'] === 4);
+    // Expected detections: shell.php (critical), version.php (high), changed.php (manifest_drift, high) -> 3
+    assert($trail1['new_detections'] === 3);
 
     $rules_triggered = array_column($trail1['detections'], 'rule');
     assert(in_array('executable_in_uploads', $rules_triggered, true));
@@ -276,14 +311,25 @@ try {
     assert($q_susp['total_matched'] === 1);
     assert(!empty($q_susp['events'][0]['detection_preview']));
 
-    // query_detections, update_detection_status, clear_detections
+    // query_detections, pagination, update_detection_status, bulk_update_status, purge_verified_detections, clear_detections
     $dets_all = EventMonitor::query_detections([], $tmp_storage);
-    assert($dets_all['counts']['total'] === 5);
-    assert($dets_all['counts']['open'] === 5);
+    assert($dets_all['counts']['total'] === 4);
+    assert($dets_all['counts']['open'] === 4);
     assert($dets_all['counts']['critical'] === 2);
 
+    $dets_page1 = EventMonitor::query_detections(['page' => 1, 'per_page' => 2], $tmp_storage);
+    assert(count($dets_page1['detections']) === 2);
+    assert($dets_page1['total_filtered'] === 4);
+    assert($dets_page1['page'] === 1);
+    assert($dets_page1['per_page'] === 2);
+    assert($dets_page1['total_pages'] === 2);
+
+    $dets_page2 = EventMonitor::query_detections(['page' => 2, 'per_page' => 2], $tmp_storage);
+    assert(count($dets_page2['detections']) === 2);
+    assert($dets_page2['detections'][0]['id'] !== $dets_page1['detections'][0]['id']);
+
     $dets_status_all = EventMonitor::query_detections(['status' => 'all', 'severity' => 'all', 'component' => 'all'], $tmp_storage);
-    assert(count($dets_status_all['detections']) === 5);
+    assert(count($dets_status_all['detections']) === 4);
 
     $dets_crit = EventMonitor::query_detections(['severity' => 'critical'], $tmp_storage);
     assert(count($dets_crit['detections']) === 2);
@@ -294,20 +340,111 @@ try {
     assert(count($after_ack['detections']) === 1);
 
     $after_ack_all = EventMonitor::query_detections(['status' => 'all'], $tmp_storage);
-    assert(count($after_ack_all['detections']) === 5);
+    assert(count($after_ack_all['detections']) === 4);
 
     assert(EventMonitor::update_detection_status($target_id, 'resolved', $tmp_storage) === true);
     $removed = EventMonitor::clear_detections('resolved', $tmp_storage);
     assert($removed === 1);
 
     $after_clear = EventMonitor::query_detections([], $tmp_storage);
-    assert($after_clear['counts']['total'] === 4);
+    assert($after_clear['counts']['total'] === 3);
+
+    // bulk_update_status
+    $bulk_updated = EventMonitor::bulk_update_status(['severity' => 'high', 'status' => 'open'], 'acknowledged', $tmp_storage);
+    assert($bulk_updated === 2);
+    $after_bulk = EventMonitor::query_detections(['status' => 'acknowledged'], $tmp_storage);
+    assert(count($after_bulk['detections']) === 2);
+
+    // purge_verified_detections removes manifest-verified, ignored-path, and deleted-untracked false positives
+    $det_file = $tmp_storage . '/' . EventMonitor::DETECTIONS_FILE;
+    $fp_rows  = [
+        json_encode([
+            'id'        => 'det_fp_manifest',
+            'rule'      => 'code_modified_runtime',
+            'severity'  => 'medium',
+            'path'      => 'web/app/plugins/demo-plugin/ok.php',
+            'raw_path'  => $plugin_match,
+            'event'     => 'CLOSE_WRITE,CLOSE',
+            'component' => 'plugins',
+            'status'    => 'open',
+        ]),
+        json_encode([
+            'id'        => 'det_fp_ignored',
+            'rule'      => 'code_modified_runtime',
+            'severity'  => 'medium',
+            'path'      => 'web/app/uploads/elementor/css/post-99.css',
+            'raw_path'  => '',
+            'event'     => 'CLOSE_WRITE,CLOSE',
+            'component' => 'uploads',
+            'status'    => 'open',
+        ]),
+        json_encode([
+            'id'        => 'det_fp_deleted',
+            'rule'      => 'code_modified_runtime',
+            'severity'  => 'medium',
+            'path'      => 'web/app/plugins/demo-plugin/temp-gone.php',
+            'raw_path'  => '',
+            'event'     => 'DELETE',
+            'component' => 'plugins',
+            'status'    => 'open',
+        ]),
+    ];
+    file_put_contents($det_file, implode("\n", $fp_rows) . "\n", FILE_APPEND);
+    $purge_res = EventMonitor::purge_verified_detections($tmp_root, $tmp_storage);
+    assert($purge_res['removed'] === 3);
+    assert($purge_res['remaining'] === 3);
 
     // Verify ServerInspector::inspect() includes 7 checks including wp_cli
     $insp = ServerInspector::inspect('php');
     assert(count($insp['checks']) === 7);
     $check_ids = array_column($insp['checks'], 'id');
     assert(in_array('wp_cli', $check_ids, true));
+
+    // 6. Multisite subsite build_recommendations() resolves canonical shared uploads/gratis-security/fim-events.jsonl
+    $ms_inspection = $base_inspection;
+    $ms_inspection['paths']['storage_dir'] = '/var/www/12fa/deploy/shared/uploads/sites/3/gratis-security';
+    $rec_ms = ServerInspector::build_recommendations($ms_inspection, 'php');
+    assert($rec_ms['log_path'] === '/var/www/12fa/deploy/shared/uploads/gratis-security/fim-events.jsonl');
+    assert(str_contains($rec_ms['service'], 'StandardOutput=append:/var/www/12fa/deploy/shared/uploads/gratis-security/fim-events.jsonl'));
+    assert(str_contains($rec_ms['service'], 'ReadWritePaths=/var/www/12fa/deploy/shared/uploads/gratis-security'));
+
+    // 7. save_probe_snapshot() / load_probe_snapshot() round-trip + multisite network fallback + expiry
+    $probe_subsite_3 = $tmp_uploads . '/sites/3/gratis-security';
+    $probe_subsite_7 = $tmp_uploads . '/sites/7/gratis-security';
+    $probe_network   = $tmp_uploads . '/gratis-security';
+    @mkdir($probe_subsite_3, 0755, true);
+    @mkdir($probe_subsite_7, 0755, true);
+
+    @unlink($probe_network . '/' . ServerInspector::PROBE_SNAPSHOT_FILE);
+
+    $snap_payload = [
+        'timestamp'  => time() - 30,
+        'auditd'     => ['status' => 'ok', 'active' => true, 'service_state' => 'active', 'dbus_denied' => false],
+        'gratis_fim' => ['status' => 'ok', 'load_state' => 'loaded', 'active_state' => 'active', 'sub_state' => 'running', 'main_pid' => 4242, 'dbus_denied' => false],
+        'processes'  => [['pid' => 4242, 'user' => 'nginx', 'cmd' => '/usr/bin/inotifywait', 'matches_web_dir' => true]],
+    ];
+    ServerInspector::save_probe_snapshot($snap_payload, $probe_subsite_3);
+
+    assert(is_file($probe_subsite_3 . '/' . ServerInspector::PROBE_SNAPSHOT_FILE));
+    assert(is_file($probe_network . '/' . ServerInspector::PROBE_SNAPSHOT_FILE));
+
+    $loaded_local = ServerInspector::load_probe_snapshot($probe_subsite_3);
+    assert(is_array($loaded_local));
+    assert($loaded_local['sapi'] === 'cli');
+    assert($loaded_local['auditd']['service_state'] === 'active');
+    assert((int) $loaded_local['gratis_fim']['main_pid'] === 4242);
+
+    // Subsite 7 has no local snapshot, falls back to network storage dir snapshot
+    $loaded_fallback = ServerInspector::load_probe_snapshot($probe_subsite_7);
+    assert(is_array($loaded_fallback));
+    assert((int) $loaded_fallback['gratis_fim']['main_pid'] === 4242);
+
+    // Expired snapshot (> PROBE_MAX_AGE_SECONDS) returns null
+    @unlink($probe_network . '/' . ServerInspector::PROBE_SNAPSHOT_FILE);
+    $expired_payload = $snap_payload;
+    $expired_payload['timestamp'] = time() - ServerInspector::PROBE_MAX_AGE_SECONDS - 60;
+    ServerInspector::save_probe_snapshot($expired_payload, $probe_subsite_7);
+    assert(ServerInspector::load_probe_snapshot($probe_subsite_7) === null);
 
     // Verify backwards compatibility of FileIntegrity::detect_server_capabilities & get_server_instructions
     $caps = FileIntegrity::detect_server_capabilities();
