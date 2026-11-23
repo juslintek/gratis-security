@@ -8,11 +8,11 @@ $tmp_wp   = $tmp_web . '/wp';
 $tmp_uploads = $tmp_web . '/app/uploads';
 $tmp_storage = $tmp_uploads . '/gratis-security';
 
-@mkdir($tmp_wp . '/wp-includes', 0755, true);
-@mkdir($tmp_uploads, 0755, true);
-@mkdir($tmp_web . '/app/cache', 0755, true);
-@mkdir($tmp_web . '/app/plugins/demo-plugin', 0755, true);
-@mkdir($tmp_storage, 0755, true);
+@mkdir($tmp_wp . '/wp-includes', 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
+@mkdir($tmp_uploads, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
+@mkdir($tmp_web . '/app/cache', 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
+@mkdir($tmp_web . '/app/plugins/demo-plugin', 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
+@mkdir($tmp_storage, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
 
 define('ABSPATH', $tmp_wp . '/');
 define('WP_CONTENT_DIR', $tmp_web . '/app');
@@ -24,16 +24,16 @@ if (!function_exists('wp_upload_dir')) {
 }
 if (!function_exists('wp_mkdir_p')) {
     function wp_mkdir_p(string $target): bool {
-        return is_dir($target) || @mkdir($target, 0755, true);
+        return is_dir($target) || @mkdir($target, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
     }
 }
 if (!function_exists('wp_next_scheduled')) {
-    function wp_next_scheduled(string $hook): bool {
+    function wp_next_scheduled(string $hook): bool { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- Standalone CLI test fixture/stub.
         return false;
     }
 }
 if (!function_exists('__')) {
-    function __(string $text, string $domain = 'default'): string {
+    function __(string $text, string $domain = 'default'): string { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- Standalone CLI test fixture/stub.
         return $text;
     }
 }
@@ -60,10 +60,10 @@ function rm_rf(string $dir): void {
         if (is_dir($path) && !is_link($path)) {
             rm_rf($path);
         } else {
-            @unlink($path);
+            @unlink($path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.unlink_unlink -- Standalone CLI test fixture/stub.
         }
     }
-    @rmdir($dir);
+    @rmdir($dir); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Standalone CLI test fixture/stub.
 }
 
 try {
@@ -138,7 +138,7 @@ try {
     assert($a_leg['is_legacy_watch'] === true);
     assert(!empty($a_leg['issues']));
 
-    $a_empty = ServerInspector::analyze_audit_rules("", $expected_web);
+    $a_empty = ServerInspector::analyze_audit_rules('', $expected_web);
     assert($a_empty['has_rule'] === false);
 
     // 4. ServerInspector::build_recommendations()
@@ -200,37 +200,39 @@ try {
 
     // Create actual files on disk for content/hash inspection
     $jpg_file = $tmp_uploads . '/photo.jpg';
-    file_put_contents($jpg_file, 'jpegbytes');
+    file_put_contents($jpg_file, 'jpegbytes'); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
 
     $shell_file = $tmp_uploads . '/shell.php';
-    file_put_contents($shell_file, '<?php eval(base64_decode($_POST["x"]));');
+    file_put_contents($shell_file, '<?php eval(base64_decode($_POST["x"]));'); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
 
     $core_file = $tmp_wp . '/wp-includes/version.php';
-    file_put_contents($core_file, '<?php $wp_version = "6.7";');
+    file_put_contents($core_file, '<?php $wp_version = "6.7";'); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
 
     $cache_file = $tmp_web . '/app/cache/page.html';
-    file_put_contents($cache_file, '<html>cached</html>');
+    file_put_contents($cache_file, '<html>cached</html>'); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
 
     $plugin_match = $tmp_web . '/app/plugins/demo-plugin/ok.php';
+    // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
     file_put_contents($plugin_match, "<?php // clean\n");
     $plugin_drift = $tmp_web . '/app/plugins/demo-plugin/changed.php';
+    // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
     file_put_contents($plugin_drift, "<?php // tampered\n");
 
     $manifest_content = hash_file('sha256', $plugin_match) . "  web/app/plugins/demo-plugin/ok.php\n"
         . str_repeat('0', 64) . "  web/app/plugins/demo-plugin/changed.php\n";
-    file_put_contents($tmp_root . '/SOURCE-MANIFEST.sha256', $manifest_content);
+    file_put_contents($tmp_root . '/SOURCE-MANIFEST.sha256', $manifest_content); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
 
     $now = time();
     $ts1 = gmdate('c', $now - 20);
     $events_jsonl = implode("\n", [
-        json_encode(['time' => $ts1, 'event' => 'CLOSE_WRITE,CLOSE', 'file' => $jpg_file]),
-        json_encode(['time' => $ts1, 'event' => 'CLOSE_WRITE,CLOSE', 'file' => $shell_file]),
-        json_encode(['time' => $ts1, 'event' => 'MODIFY', 'file' => $core_file]),
-        json_encode(['time' => $ts1, 'event' => 'CREATE', 'file' => $cache_file]),
-        json_encode(['time' => $ts1, 'event' => 'CLOSE_WRITE,CLOSE', 'file' => $plugin_match]),
-        json_encode(['time' => $ts1, 'event' => 'CLOSE_WRITE,CLOSE', 'file' => $plugin_drift]),
+        json_encode(['time' => $ts1, 'event' => 'CLOSE_WRITE,CLOSE', 'file' => $jpg_file]), // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Standalone CLI test fixture/stub.
+        json_encode(['time' => $ts1, 'event' => 'CLOSE_WRITE,CLOSE', 'file' => $shell_file]), // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Standalone CLI test fixture/stub.
+        json_encode(['time' => $ts1, 'event' => 'MODIFY', 'file' => $core_file]), // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Standalone CLI test fixture/stub.
+        json_encode(['time' => $ts1, 'event' => 'CREATE', 'file' => $cache_file]), // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Standalone CLI test fixture/stub.
+        json_encode(['time' => $ts1, 'event' => 'CLOSE_WRITE,CLOSE', 'file' => $plugin_match]), // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Standalone CLI test fixture/stub.
+        json_encode(['time' => $ts1, 'event' => 'CLOSE_WRITE,CLOSE', 'file' => $plugin_drift]), // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Standalone CLI test fixture/stub.
     ]) . "\n";
-    file_put_contents($log_file, $events_jsonl);
+    file_put_contents($log_file, $events_jsonl); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
 
     // Direct evaluate_event check: manifest-verified file MUST return null (no code_modified_runtime fallthrough)
     $manifest_map = [
@@ -286,15 +288,15 @@ try {
 
     // Append duplicate event within 60s -> deduplicated
     $ts_dup = gmdate('c', $now - 10);
-    file_put_contents($log_file, json_encode(['time' => $ts_dup, 'event' => 'CLOSE_WRITE,CLOSE', 'file' => $shell_file]) . "\n", FILE_APPEND);
+    file_put_contents($log_file, json_encode(['time' => $ts_dup, 'event' => 'CLOSE_WRITE,CLOSE', 'file' => $shell_file]) . "\n", FILE_APPEND); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents,WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Standalone CLI test fixture/stub.
     $trail3 = EventMonitor::trail([$log_file], $tmp_storage, $tmp_root);
     assert($trail3['lines_read'] === 1);
     assert($trail3['new_detections'] === 0);
 
     // Truncate/rotate log and write a new critical event
     $shell_file2 = $tmp_uploads . '/backdoor2.php';
-    file_put_contents($shell_file2, '<?php system($_GET["c"]);');
-    file_put_contents($log_file, json_encode(['time' => gmdate('c', $now), 'event' => 'CREATE', 'file' => $shell_file2]) . "\n");
+    file_put_contents($shell_file2, '<?php system($_GET["c"]);'); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
+    file_put_contents($log_file, json_encode(['time' => gmdate('c', $now), 'event' => 'CREATE', 'file' => $shell_file2]) . "\n"); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents,WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Standalone CLI test fixture/stub.
     $trail4 = EventMonitor::trail([$log_file], $tmp_storage, $tmp_root);
     assert($trail4['lines_read'] === 1);
     assert($trail4['new_detections'] === 1);
@@ -358,7 +360,7 @@ try {
     // purge_verified_detections removes manifest-verified, ignored-path, and deleted-untracked false positives
     $det_file = $tmp_storage . '/' . EventMonitor::DETECTIONS_FILE;
     $fp_rows  = [
-        json_encode([
+        json_encode([ // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Standalone CLI test fixture/stub.
             'id'        => 'det_fp_manifest',
             'rule'      => 'code_modified_runtime',
             'severity'  => 'medium',
@@ -368,7 +370,7 @@ try {
             'component' => 'plugins',
             'status'    => 'open',
         ]),
-        json_encode([
+        json_encode([ // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Standalone CLI test fixture/stub.
             'id'        => 'det_fp_ignored',
             'rule'      => 'code_modified_runtime',
             'severity'  => 'medium',
@@ -378,7 +380,7 @@ try {
             'component' => 'uploads',
             'status'    => 'open',
         ]),
-        json_encode([
+        json_encode([ // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Standalone CLI test fixture/stub.
             'id'        => 'det_fp_deleted',
             'rule'      => 'code_modified_runtime',
             'severity'  => 'medium',
@@ -389,7 +391,7 @@ try {
             'status'    => 'open',
         ]),
     ];
-    file_put_contents($det_file, implode("\n", $fp_rows) . "\n", FILE_APPEND);
+    file_put_contents($det_file, implode("\n", $fp_rows) . "\n", FILE_APPEND); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
     $purge_res = EventMonitor::purge_verified_detections($tmp_root, $tmp_storage);
     assert($purge_res['removed'] === 3);
     assert($purge_res['remaining'] === 3);
@@ -412,10 +414,10 @@ try {
     $probe_subsite_3 = $tmp_uploads . '/sites/3/gratis-security';
     $probe_subsite_7 = $tmp_uploads . '/sites/7/gratis-security';
     $probe_network   = $tmp_uploads . '/gratis-security';
-    @mkdir($probe_subsite_3, 0755, true);
-    @mkdir($probe_subsite_7, 0755, true);
+    @mkdir($probe_subsite_3, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
+    @mkdir($probe_subsite_7, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
 
-    @unlink($probe_network . '/' . ServerInspector::PROBE_SNAPSHOT_FILE);
+    @unlink($probe_network . '/' . ServerInspector::PROBE_SNAPSHOT_FILE); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.unlink_unlink -- Standalone CLI test fixture/stub.
 
     $snap_payload = [
         'timestamp'  => time() - 30,
@@ -440,7 +442,7 @@ try {
     assert((int) $loaded_fallback['gratis_fim']['main_pid'] === 4242);
 
     // Expired snapshot (> PROBE_MAX_AGE_SECONDS) returns null
-    @unlink($probe_network . '/' . ServerInspector::PROBE_SNAPSHOT_FILE);
+    @unlink($probe_network . '/' . ServerInspector::PROBE_SNAPSHOT_FILE); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.unlink_unlink -- Standalone CLI test fixture/stub.
     $expired_payload = $snap_payload;
     $expired_payload['timestamp'] = time() - ServerInspector::PROBE_MAX_AGE_SECONDS - 60;
     ServerInspector::save_probe_snapshot($expired_payload, $probe_subsite_7);

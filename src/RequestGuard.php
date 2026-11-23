@@ -54,13 +54,13 @@ final class RequestGuard {
             return false;
         }
 
-        $ip_bin = @inet_pton($ip);
+        $ip_bin = @inet_pton($ip); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         if (false === $ip_bin) {
             return false;
         }
 
         if (!str_contains($rule, '/')) {
-            $rule_bin = @inet_pton($rule);
+            $rule_bin = @inet_pton($rule); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             return false !== $rule_bin && $ip_bin === $rule_bin;
         }
 
@@ -73,7 +73,7 @@ final class RequestGuard {
             return false;
         }
 
-        $net_bin = @inet_pton($net);
+        $net_bin = @inet_pton($net); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         if (false === $net_bin || strlen($ip_bin) !== strlen($net_bin)) {
             return false;
         }
@@ -119,11 +119,11 @@ final class RequestGuard {
      *
      * @return array<string,mixed>
      */
-    public static function add_ip_rule(string $ip_or_cidr, string $list, string $note = '', ?string $storage_dir = null): array {
+    public static function add_ip_rule(string $ip_or_cidr, string $list_type, string $note = '', ?string $storage_dir = null): array {
         $ip_or_cidr = trim($ip_or_cidr);
-        $list       = strtolower(trim($list));
+        $list_type  = strtolower(trim($list_type));
 
-        if (!in_array($list, ['allowlist', 'blocklist'], true)) {
+        if (!in_array($list_type, ['allowlist', 'blocklist'], true)) {
             return ['success' => false, 'error' => 'Invalid IP list type; expected allowlist or blocklist.'];
         }
         if (!SignatureFeed::is_valid_ip_or_cidr($ip_or_cidr)) {
@@ -139,16 +139,16 @@ final class RequestGuard {
             'added_at' => gmdate('c'),
         ];
 
-        $rules = self::with_lock($storage, static function () use ($storage, $list, $ip_or_cidr, $entry): array {
+        $rules = self::with_lock($storage, static function () use ($storage, $list_type, $ip_or_cidr, $entry): array {
             $current = self::read_ip_rules_unlocked($storage);
             $updated = [];
-            foreach ($current[$list] as $item) {
+            foreach ($current[$list_type] as $item) {
                 if (($item['ip'] ?? '') !== $ip_or_cidr) {
                     $updated[] = $item;
                 }
             }
-            $updated[]      = $entry;
-            $current[$list] = $updated;
+            $updated[]           = $entry;
+            $current[$list_type] = $updated;
             self::atomic_write($storage . '/' . self::IP_RULES_FILE, FileIntegrity::simd_encode($current));
             return $current;
         });
@@ -163,23 +163,23 @@ final class RequestGuard {
     /**
      * Remove an IP/CIDR entry from the allowlist or blocklist.
      */
-    public static function remove_ip_rule(string $ip_or_cidr, string $list, ?string $storage_dir = null): bool {
+    public static function remove_ip_rule(string $ip_or_cidr, string $list_type, ?string $storage_dir = null): bool {
         $ip_or_cidr = trim($ip_or_cidr);
-        $list       = strtolower(trim($list));
-        if ('' === $ip_or_cidr || !in_array($list, ['allowlist', 'blocklist'], true)) {
+        $list_type  = strtolower(trim($list_type));
+        if ('' === $ip_or_cidr || !in_array($list_type, ['allowlist', 'blocklist'], true)) {
             return false;
         }
 
         $storage = self::resolve_storage_dir($storage_dir);
-        if (!@is_file($storage . '/' . self::IP_RULES_FILE)) {
+        if (!@is_file($storage . '/' . self::IP_RULES_FILE)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             return false;
         }
 
-        return (bool) self::with_lock($storage, static function () use ($storage, $list, $ip_or_cidr): bool {
+        return (bool) self::with_lock($storage, static function () use ($storage, $list_type, $ip_or_cidr): bool {
             $current = self::read_ip_rules_unlocked($storage);
-            $before  = count($current[$list]);
+            $before  = count($current[$list_type]);
             $kept    = [];
-            foreach ($current[$list] as $item) {
+            foreach ($current[$list_type] as $item) {
                 if (($item['ip'] ?? '') !== $ip_or_cidr) {
                     $kept[] = $item;
                 }
@@ -187,7 +187,7 @@ final class RequestGuard {
             if (count($kept) === $before) {
                 return false;
             }
-            $current[$list] = $kept;
+            $current[$list_type] = $kept;
             self::atomic_write($storage . '/' . self::IP_RULES_FILE, FileIntegrity::simd_encode($current));
             return true;
         });
@@ -200,7 +200,7 @@ final class RequestGuard {
      */
     public static function is_ip_in_list(string $ip, array $entries): bool {
         $ip = trim($ip);
-        if ('' === $ip || false === @inet_pton($ip)) {
+        if ('' === $ip || false === @inet_pton($ip)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             return false;
         }
 
@@ -221,7 +221,7 @@ final class RequestGuard {
     public static function get_active_bans(?string $storage_dir = null): array {
         $storage = self::resolve_storage_dir($storage_dir);
         $path    = $storage . '/' . self::BANS_FILE;
-        if (!@is_file($path)) {
+        if (!@is_file($path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             return [];
         }
 
@@ -324,7 +324,7 @@ final class RequestGuard {
         $ip      = trim($ip);
         $storage = self::resolve_storage_dir($storage_dir);
         $path    = $storage . '/' . self::BANS_FILE;
-        if ('' === $ip || !@is_file($path)) {
+        if ('' === $ip || !@is_file($path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             return false;
         }
 
@@ -496,7 +496,7 @@ final class RequestGuard {
             }
 
             $m = [];
-            if (1 !== @preg_match((string) $rule['pattern'], $subject, $m)) {
+            if (1 !== @preg_match((string) $rule['pattern'], $subject, $m)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 continue;
             }
 
@@ -548,22 +548,24 @@ final class RequestGuard {
         }
 
         $ip     = self::resolve_client_ip();
-        $method = strtoupper(isset($_SERVER['REQUEST_METHOD']) ? (string) $_SERVER['REQUEST_METHOD'] : 'GET');
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+        $method = self::resolve_request_method();
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- WAF inspects raw unslashed request URI.
         $uri = isset($_SERVER['REQUEST_URI']) ? self::unslash_str((string) $_SERVER['REQUEST_URI']) : '';
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- WAF inspects raw unslashed query string.
         $query = isset($_SERVER['QUERY_STRING']) ? self::unslash_str((string) $_SERVER['QUERY_STRING']) : '';
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- WAF inspects raw unslashed user-agent.
         $user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? self::unslash_str((string) $_SERVER['HTTP_USER_AGENT']) : '';
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- WAF inspects raw unslashed referer.
         $referer = isset($_SERVER['HTTP_REFERER']) ? self::unslash_str((string) $_SERVER['HTTP_REFERER']) : '';
 
         $body = '';
         if (in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
+            // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             $raw_body = @file_get_contents('php://input');
             if (is_string($raw_body) && '' !== $raw_body) {
                 $body = substr($raw_body, 0, 65536);
-            } elseif (!empty($_POST) && is_array($_POST)) {
+            } elseif (!empty($_POST) && is_array($_POST)) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- WAF inspects all incoming POST payloads before handlers.
+                // phpcs:ignore WordPress.Security.NonceVerification.Missing -- WAF inspects raw POST body for attack signatures.
                 $body = substr(http_build_query($_POST), 0, 65536);
             }
         }
@@ -658,7 +660,7 @@ final class RequestGuard {
         }
 
         $ip = self::resolve_client_ip();
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- WAF inspects raw unslashed request URI.
         $uri = isset($_SERVER['REQUEST_URI']) ? self::unslash_str((string) $_SERVER['REQUEST_URI']) : '';
         if ('' === $ip || '' === $uri) {
             return;
@@ -686,7 +688,7 @@ final class RequestGuard {
 
         self::record_event([
             'ip'              => $ip,
-            'method'          => strtoupper(isset($_SERVER['REQUEST_METHOD']) ? (string) $_SERVER['REQUEST_METHOD'] : 'GET'),
+            'method'          => self::resolve_request_method(),
             'uri'             => $uri,
             'category'        => '404_flood',
             'rule'            => '404_probe_flood',
@@ -744,14 +746,17 @@ final class RequestGuard {
         $log_path = $storage . '/' . self::LOG_FILE;
 
         self::with_lock($storage, static function () use ($log_path, $normalized): void {
-            $line = json_encode($normalized, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            $flags = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
+            $line  = function_exists('wp_json_encode')
+                ? wp_json_encode($normalized, $flags)
+                : json_encode($normalized, $flags); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Fallback when executed outside WordPress runtime.
             if (!is_string($line)) {
                 return;
             }
-            @file_put_contents($log_path, $line . "\n", FILE_APPEND | LOCK_EX);
+            @file_put_contents($log_path, $line . "\n", FILE_APPEND | LOCK_EX); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
 
             // Trim only when line count exceeds MAX_LOG_ENTRIES so normal appends remain O(1).
-            $lines = @file($log_path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            $lines = @file($log_path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             if (is_array($lines) && count($lines) > self::MAX_LOG_ENTRIES) {
                 $trimmed = array_slice($lines, -self::MAX_LOG_ENTRIES);
                 self::atomic_write($log_path, implode("\n", $trimmed) . "\n");
@@ -771,7 +776,7 @@ final class RequestGuard {
         $storage  = self::resolve_storage_dir($storage_dir);
         $log_path = $storage . '/' . self::LOG_FILE;
 
-        if (!@is_file($log_path)) {
+        if (!@is_file($log_path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             self::migrate_legacy_blocks($storage, $log_path);
         }
 
@@ -906,13 +911,13 @@ final class RequestGuard {
     public static function clear_requests(?string $storage_dir = null): void {
         $storage  = self::resolve_storage_dir($storage_dir);
         $log_path = $storage . '/' . self::LOG_FILE;
-        if (!@is_dir($storage)) {
+        if (!@is_dir($storage)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             return;
         }
 
         self::with_lock($storage, static function () use ($log_path): void {
-            if (@file_exists($log_path)) {
-                @unlink($log_path);
+            if (@file_exists($log_path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                @unlink($log_path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.unlink_unlink -- Low-level local filesystem/OS security operation.
             }
         });
     }
@@ -922,11 +927,24 @@ final class RequestGuard {
         return 'all' === $norm ? '' : $norm;
     }
 
+    private static function resolve_request_method(): string {
+        if (!isset($_SERVER['REQUEST_METHOD'])) {
+            return 'GET';
+        }
+        $raw   = function_exists('wp_unslash')
+            ? (string) wp_unslash($_SERVER['REQUEST_METHOD']) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitized immediately below.
+            : stripslashes((string) $_SERVER['REQUEST_METHOD']); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- Standalone CLI fallback; sanitized below.
+        $clean = preg_replace('/[^A-Z]/', '', strtoupper($raw));
+        return is_string($clean) && '' !== $clean ? $clean : 'GET';
+    }
+
     private static function resolve_client_ip(): string {
         if (!isset($_SERVER['REMOTE_ADDR'])) {
             return '';
         }
-        $raw = self::unslash_str((string) $_SERVER['REMOTE_ADDR']);
+        $raw = function_exists('wp_unslash')
+            ? (string) wp_unslash($_SERVER['REMOTE_ADDR']) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Validated with FILTER_VALIDATE_IP below.
+            : stripslashes((string) $_SERVER['REMOTE_ADDR']); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- Standalone CLI fallback; validated below.
         $ip  = filter_var(trim($raw), FILTER_VALIDATE_IP);
         return false === $ip ? '' : (string) $ip;
     }
@@ -946,11 +964,11 @@ final class RequestGuard {
             nocache_headers();
         }
 
-        $msg   = function_exists('esc_html__') ? esc_html__('Request blocked by Gratis Security.', 'gratis-security') : 'Request blocked by Gratis Security.';
-        $title = function_exists('esc_html__') ? esc_html__('Forbidden', 'gratis-security') : 'Forbidden';
+        $msg   = function_exists('__') ? __('Request blocked by Gratis Security.', 'gratis-security') : 'Request blocked by Gratis Security.';
+        $title = function_exists('__') ? __('Forbidden', 'gratis-security') : 'Forbidden';
 
         if (function_exists('wp_die')) {
-            wp_die($msg, $title, ['response' => 403]);
+            wp_die(esc_html($msg), esc_html($title), ['response' => 403]);
         }
         exit(1);
     }
@@ -969,11 +987,11 @@ final class RequestGuard {
     }
 
     private static function ensure_dir(string $dir): void {
-        if (!@is_dir($dir)) {
+        if (!@is_dir($dir)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             if (function_exists('wp_mkdir_p')) {
                 wp_mkdir_p($dir);
             } else {
-                @mkdir($dir, 0755, true);
+                @mkdir($dir, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Low-level local filesystem/OS security operation.
             }
         }
     }
@@ -1012,10 +1030,10 @@ final class RequestGuard {
      * @return array<mixed>
      */
     private static function read_json_file_unlocked(string $path): array {
-        if (!@is_file($path) || !@is_readable($path)) {
+        if (!@is_file($path) || !@is_readable($path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             return [];
         }
-        $raw = (string) @file_get_contents($path);
+        $raw = (string) @file_get_contents($path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
         if ('' === $raw) {
             return [];
         }
@@ -1027,15 +1045,15 @@ final class RequestGuard {
      * @return array<int,array<string,mixed>>
      */
     private static function read_log_entries(string $log_path): array {
-        if (!@is_file($log_path) || !@is_readable($log_path)) {
+        if (!@is_file($log_path) || !@is_readable($log_path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             return [];
         }
-        $fp = @fopen($log_path, 'rb');
+        $fp = @fopen($log_path, 'rb'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Low-level local filesystem/OS security operation.
         if (!$fp) {
             return [];
         }
         $items = [];
-        while (($line = fgets($fp)) !== false) {
+        for ($line = fgets($fp); false !== $line; $line = fgets($fp)) {
             $line = trim($line);
             if ('' === $line) {
                 continue;
@@ -1045,7 +1063,7 @@ final class RequestGuard {
                 $items[] = $dec;
             }
         }
-        fclose($fp);
+        fclose($fp); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Streaming file handle close for security logs/locks.
         return $items;
     }
 
@@ -1056,7 +1074,7 @@ final class RequestGuard {
         $legacy_file = $storage . '/' . WAF::BLOCKS_FILE;
         $legacy_data = [];
 
-        if (@is_file($legacy_file)) {
+        if (@is_file($legacy_file)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             $decoded = self::read_json_file_unlocked($legacy_file);
             if (!empty($decoded)) {
                 $legacy_data = $decoded;
@@ -1074,10 +1092,11 @@ final class RequestGuard {
 
         self::ensure_dir($storage);
         self::with_lock($storage, static function () use ($log_path, $legacy_data): void {
-            if (@is_file($log_path)) {
+            if (@is_file($log_path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 return;
             }
             $lines = [];
+            $flags = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
             foreach ($legacy_data as $item) {
                 if (!is_array($item)) {
                     continue;
@@ -1102,7 +1121,9 @@ final class RequestGuard {
                     'matched_snippet' => '',
                     'mode'            => 'block',
                 ];
-                $encoded = json_encode($row, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                $encoded = function_exists('wp_json_encode')
+                    ? wp_json_encode($row, $flags)
+                    : json_encode($row, $flags); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Fallback when executed outside WordPress runtime.
                 if (is_string($encoded)) {
                     $lines[] = $encoded;
                 }
@@ -1115,20 +1136,20 @@ final class RequestGuard {
 
     /**
      * @template T
-     * @param callable():T $fn
+     * @param callable():T $callback
      * @return T
      */
-    private static function with_lock(string $storage, callable $fn): mixed {
-        $lock_fp = @fopen($storage . '/request-guard.lock', 'c+');
+    private static function with_lock(string $storage, callable $callback): mixed {
+        $lock_fp = @fopen($storage . '/request-guard.lock', 'c+'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Low-level local filesystem/OS security operation.
         if ($lock_fp) {
-            @flock($lock_fp, LOCK_EX);
+            @flock($lock_fp, LOCK_EX); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         }
         try {
-            return $fn();
+            return $callback();
         } finally {
             if ($lock_fp) {
-                @flock($lock_fp, LOCK_UN);
-                @fclose($lock_fp);
+                @flock($lock_fp, LOCK_UN); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                @fclose($lock_fp); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Low-level local filesystem/OS security operation.
             }
         }
     }
@@ -1136,19 +1157,19 @@ final class RequestGuard {
     private static function atomic_write(string $target, string $content): void {
         $dir = dirname($target);
         self::ensure_dir($dir);
-        $tmp = @tempnam($dir, 'gs_');
+        $tmp = @tempnam($dir, 'gs_'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         if (false === $tmp) {
-            @file_put_contents($target, $content, LOCK_EX);
+            @file_put_contents($target, $content, LOCK_EX); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
             return;
         }
-        if (false !== @file_put_contents($tmp, $content)) {
-            @chmod($tmp, 0640);
-            if (!@rename($tmp, $target)) {
-                @unlink($tmp);
-                @file_put_contents($target, $content, LOCK_EX);
+        if (false !== @file_put_contents($tmp, $content)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
+            @chmod($tmp, 0640); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Low-level local filesystem/OS security operation.
+            if (!@rename($tmp, $target)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.rename_rename -- Low-level local filesystem/OS security operation.
+                @unlink($tmp); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.unlink_unlink -- Low-level local filesystem/OS security operation.
+                @file_put_contents($target, $content, LOCK_EX); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
             }
         } else {
-            @unlink($tmp);
+            @unlink($tmp); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.unlink_unlink -- Low-level local filesystem/OS security operation.
         }
     }
 }

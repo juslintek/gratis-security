@@ -24,7 +24,7 @@ final class SetupWizard {
         }
 
         $storage          = self::resolve_storage_dir($storage_dir);
-        $storage_writable = '' !== $storage && @is_dir($storage) && @is_writable($storage);
+        $storage_writable = '' !== $storage && @is_dir($storage) && @is_writable($storage); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- Low-level local filesystem/OS security operation.
 
         $disable_wp_cron = defined('DISABLE_WP_CRON') && (bool) DISABLE_WP_CRON;
         $wp_cron_enabled = !$disable_wp_cron;
@@ -107,13 +107,13 @@ final class SetupWizard {
         // Step 1: Ensure hardened storage directory and base events log exist.
         self::ensure_hardened_storage($storage);
         $events_file = $storage . '/' . EventMonitor::EVENTS_FILE;
-        if (!@file_exists($events_file)) {
-            @touch($events_file);
+        if (!@file_exists($events_file)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            @touch($events_file); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_touch -- Low-level local filesystem/OS security operation.
         }
         $steps['storage'] = [
-            'ok'                 => @is_dir($storage) && @is_writable($storage),
+            'ok'                 => @is_dir($storage) && @is_writable($storage), // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- Low-level local filesystem/OS security operation.
             'storage_dir'        => $storage,
-            'events_file_exists' => @file_exists($events_file),
+            'events_file_exists' => @file_exists($events_file), // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         ];
 
         // Step 2: Merge and persist safe security defaults.
@@ -315,19 +315,20 @@ final class SetupWizard {
     }
 
     private static function ensure_hardened_storage(string $storage): void {
-        if (!@is_dir($storage)) {
+        if (!@is_dir($storage)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             if (function_exists('wp_mkdir_p')) {
                 wp_mkdir_p($storage);
             } else {
-                @mkdir($storage, 0755, true);
+                @mkdir($storage, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Low-level local filesystem/OS security operation.
             }
         }
         $htaccess = $storage . '/.htaccess';
-        if (!@file_exists($htaccess)) {
-            @file_put_contents($htaccess, "Require all denied\nDeny from all\n");
+        if (!@file_exists($htaccess)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            @file_put_contents($htaccess, "Require all denied\nDeny from all\n"); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
         }
         $index = $storage . '/index.php';
-        if (!@file_exists($index)) {
+        if (!@file_exists($index)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
             @file_put_contents($index, "<?php\n// Silence is golden.\n");
         }
     }

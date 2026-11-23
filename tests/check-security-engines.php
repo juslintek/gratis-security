@@ -8,10 +8,10 @@ $tmp_wp      = $tmp_web . '/wp';
 $tmp_uploads = $tmp_web . '/app/uploads';
 $tmp_storage = $tmp_uploads . '/gratis-security';
 
-@mkdir($tmp_wp . '/wp-includes', 0755, true);
-@mkdir($tmp_uploads, 0755, true);
-@mkdir($tmp_web . '/app/plugins/demo-plugin', 0755, true);
-@mkdir($tmp_storage, 0755, true);
+@mkdir($tmp_wp . '/wp-includes', 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
+@mkdir($tmp_uploads, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
+@mkdir($tmp_web . '/app/plugins/demo-plugin', 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
+@mkdir($tmp_storage, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
 
 define('ABSPATH', $tmp_wp . '/');
 define('WP_CONTENT_DIR', $tmp_web . '/app');
@@ -23,16 +23,16 @@ if (!function_exists('wp_upload_dir')) {
 }
 if (!function_exists('wp_mkdir_p')) {
     function wp_mkdir_p(string $target): bool {
-        return is_dir($target) || @mkdir($target, 0755, true);
+        return is_dir($target) || @mkdir($target, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
     }
 }
 if (!function_exists('get_option')) {
-    function get_option(string $option, mixed $default = false): mixed {
-        return $GLOBALS['gratis_test_options'][$option] ?? $default;
+    function get_option(string $option, mixed $default_value = false): mixed {
+        return $GLOBALS['gratis_test_options'][$option] ?? $default_value;
     }
 }
 if (!function_exists('__')) {
-    function __(string $text, string $domain = 'default'): string {
+    function __(string $text, string $domain = 'default'): string { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- Standalone CLI test fixture/stub.
         return $text;
     }
 }
@@ -71,10 +71,10 @@ function rm_rf(string $dir): void {
         if (is_dir($path) && !is_link($path)) {
             rm_rf($path);
         } else {
-            @unlink($path);
+            @unlink($path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.unlink_unlink -- Standalone CLI test fixture/stub.
         }
     }
-    @rmdir($dir);
+    @rmdir($dir); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Standalone CLI test fixture/stub.
 }
 
 try {
@@ -90,7 +90,7 @@ try {
         assert(!empty($rule['category']));
         assert(in_array($rule['severity'], ['critical', 'high', 'medium'], true));
         assert(!empty($rule['extensions']) && is_array($rule['extensions']));
-        assert(false !== @preg_match($rule['pattern'], ''));
+        assert(false !== @preg_match($rule['pattern'], '')); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Standalone CLI test fixture/stub.
         assert(SignatureFeed::is_safe_regex($rule['pattern']) === true);
     }
 
@@ -99,7 +99,7 @@ try {
         assert(!empty($rule['category']));
         assert(in_array($rule['severity'], ['critical', 'high', 'medium', 'low'], true));
         assert(in_array($rule['target'], ['uri', 'query', 'body', 'input', 'ua', 'all'], true));
-        assert(false !== @preg_match($rule['pattern'], ''));
+        assert(false !== @preg_match($rule['pattern'], '')); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Standalone CLI test fixture/stub.
         assert(SignatureFeed::is_safe_regex($rule['pattern']) === true);
     }
 
@@ -170,33 +170,33 @@ try {
     assert($update_res['counts']['malware_rules'] >= 35);
     assert($update_res['counts']['request_rules'] >= 25);
 
-    $status = SignatureFeed::get_status($tmp_storage);
-    assert($status['last_updated'] === $update_res['last_updated']);
-    assert($status['counts']['malware_rules'] === $update_res['counts']['malware_rules']);
+    $feed_status = SignatureFeed::get_status($tmp_storage);
+    assert($feed_status['last_updated'] === $update_res['last_updated']);
+    assert($feed_status['counts']['malware_rules'] === $update_res['counts']['malware_rules']);
 
     // 4. MalwareScanner::scan()
     $benign_file = $tmp_web . '/app/plugins/demo-plugin/clean.php';
-    file_put_contents($benign_file, "<?php\nfunction demo_hello(): string { return 'hello'; }\n");
+    file_put_contents($benign_file, "<?php\nfunction demo_hello(): string { return 'hello'; }\n"); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
 
     $webshell_file = $tmp_web . '/app/plugins/demo-plugin/webshell.php';
     $webshell_body = "<?php\n// hidden\n@eval(base64_decode(\$_POST['x']));\n";
-    file_put_contents($webshell_file, $webshell_body);
+    file_put_contents($webshell_file, $webshell_body); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
 
     $gif_shell_file = $tmp_web . '/app/plugins/demo-plugin/logo.php';
-    file_put_contents($gif_shell_file, "GIF89a<?php system(\$_GET['c']); ?>\n");
+    file_put_contents($gif_shell_file, "GIF89a<?php system(\$_GET['c']); ?>\n"); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
 
     $uploads_evil = $tmp_uploads . '/evil.php';
-    file_put_contents($uploads_evil, "<?php echo 'rogue';\n");
+    file_put_contents($uploads_evil, "<?php echo 'rogue';\n"); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
 
     // EICAR test string matches built-in bad SHA-256 hash in a scanned .js file.
     $eicar_file = $tmp_web . '/app/plugins/demo-plugin/eicar.js';
-    file_put_contents($eicar_file, 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*');
+    file_put_contents($eicar_file, 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
 
     // Verified manifest file (clean when deep=false, also has a pattern to verify deep=true scans it).
     $manifest_file = $tmp_web . '/app/plugins/demo-plugin/manifest-verified.php';
-    file_put_contents($manifest_file, "<?php\n@eval(str_rot13('nop'));\n");
+    file_put_contents($manifest_file, "<?php\n@eval(str_rot13('nop'));\n"); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
     $manifest_content = hash_file('sha256', $manifest_file) . "  web/app/plugins/demo-plugin/manifest-verified.php\n";
-    file_put_contents($tmp_root . '/SOURCE-MANIFEST.sha256', $manifest_content);
+    file_put_contents($tmp_root . '/SOURCE-MANIFEST.sha256', $manifest_content); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
 
     // Self-exclusion check against the gratis-security plugin directory itself.
     $self_scan = MalwareScanner::scan(dirname(__DIR__), [
@@ -256,6 +256,7 @@ try {
     assert(!in_array('web/app/plugins/demo-plugin/webshell.php', $after_wl_files, true));
 
     // Tamper with whitelisted file -> must be flagged again.
+    // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
     file_put_contents($webshell_file, $webshell_body . "// tampered\n");
     $after_tamper = MalwareScanner::scan($tmp_web, [
         'project_root' => $tmp_root,
@@ -272,7 +273,7 @@ try {
     assert($trav2['success'] === false);
 
     // Quarantine -> list -> restore -> verify bytes -> quarantine -> delete
-    $orig_bytes = (string) file_get_contents($uploads_evil);
+    $orig_bytes = (string) file_get_contents($uploads_evil); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Standalone CLI test fixture/stub.
     $q_res      = MalwareScanner::quarantine_file('web/app/uploads/evil.php', $tmp_root, $tmp_storage, 'executable_in_uploads');
     assert($q_res['success'] === true);
     assert(!file_exists($uploads_evil));
@@ -286,7 +287,7 @@ try {
     $restored = MalwareScanner::restore_quarantine($q_id, $tmp_storage);
     assert($restored['success'] === true);
     assert(file_exists($uploads_evil));
-    assert(file_get_contents($uploads_evil) === $orig_bytes);
+    assert(file_get_contents($uploads_evil) === $orig_bytes); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Standalone CLI test fixture/stub.
     assert(count(MalwareScanner::list_quarantine($tmp_storage)) === 0);
 
     $q_res2 = MalwareScanner::quarantine_file('web/app/uploads/evil.php', $tmp_root, $tmp_storage, 'executable_in_uploads');

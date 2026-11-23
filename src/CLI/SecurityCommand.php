@@ -264,7 +264,7 @@ final class SecurityCommand {
                 $info   = ServerInspector::inspect($mode);
 
                 if ('json' === $format) {
-                    \WP_CLI::line((string) json_encode($info, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+                    \WP_CLI::line(self::encode_json($info));
                     break;
                 }
 
@@ -312,7 +312,7 @@ final class SecurityCommand {
                 $res    = EventMonitor::trail();
 
                 if ('json' === $format) {
-                    \WP_CLI::line((string) json_encode($res, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+                    \WP_CLI::line(self::encode_json($res));
                     break;
                 }
 
@@ -348,7 +348,7 @@ final class SecurityCommand {
                 $res = EventMonitor::query_detections($filters);
 
                 if ('json' === $format) {
-                    \WP_CLI::line((string) json_encode($res, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+                    \WP_CLI::line(self::encode_json($res));
                     break;
                 }
 
@@ -383,7 +383,7 @@ final class SecurityCommand {
                 $res = EventMonitor::query_events($filters);
 
                 if ('json' === $format) {
-                    \WP_CLI::line((string) json_encode($res, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+                    \WP_CLI::line(self::encode_json($res));
                     break;
                 }
 
@@ -677,9 +677,9 @@ final class SecurityCommand {
                 $rows   = [
                     ['Metric' => 'Malware Rules', 'Count' => (string) (int) ($counts['malware_rules'] ?? 0)],
                     ['Metric' => 'Request Rules', 'Count' => (string) (int) ($counts['request_rules'] ?? 0)],
-                    ['Metric' => 'Bad Hashes',    'Count' => (string) (int) ($counts['bad_hashes'] ?? 0)],
-                    ['Metric' => 'Feed IPs',      'Count' => (string) (int) ($counts['feed_ips'] ?? 0)],
-                    ['Metric' => 'WP Checksums',  'Count' => (string) (int) ($counts['wp_checksums'] ?? 0)],
+                    ['Metric' => 'Bad Hashes', 'Count' => (string) (int) ($counts['bad_hashes'] ?? 0)],
+                    ['Metric' => 'Feed IPs', 'Count' => (string) (int) ($counts['feed_ips'] ?? 0)],
+                    ['Metric' => 'WP Checksums', 'Count' => (string) (int) ($counts['wp_checksums'] ?? 0)],
                 ];
                 \WP_CLI\Utils\format_items('table', $rows, ['Metric', 'Count']);
                 break;
@@ -986,6 +986,7 @@ final class SecurityCommand {
             $encoded = wp_json_encode($data, $flags);
             return is_string($encoded) ? $encoded : '{}';
         }
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Fallback when executed outside WordPress runtime.
         $encoded = json_encode($data, $flags);
         return is_string($encoded) ? $encoded : '{}';
     }
@@ -1000,7 +1001,7 @@ final class SecurityCommand {
                 continue;
             }
             if (is_array($v)) {
-                $parts[] = $k . '=' . (string) json_encode($v, JSON_UNESCAPED_SLASHES);
+                $parts[] = $k . '=' . (string) wp_json_encode($v, JSON_UNESCAPED_SLASHES);
             } elseif (is_bool($v)) {
                 $parts[] = $k . '=' . ($v ? 'true' : 'false');
             } else {

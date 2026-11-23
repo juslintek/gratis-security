@@ -235,8 +235,7 @@ final class UiHelpers {
         echo '<span>' . esc_html($title) . '</span>';
         echo '<button type="button" class="button button-small gratis-copy-btn" data-copy="' . esc_attr($code) . '">' . esc_html__('Kopijuoti', 'gratis-security') . '</button>';
         echo '</div>';
-        $id_attr = '' !== $pre_id ? ' id="' . esc_attr($pre_id) . '"' : '';
-        echo '<pre class="gs-code-pre"' . $id_attr . '>' . esc_html($code) . '</pre>';
+        echo '<pre class="gs-code-pre"' . ('' !== $pre_id ? ' id="' . esc_attr($pre_id) . '"' : '') . '>' . esc_html($code) . '</pre>';
         echo '</div>';
     }
 
