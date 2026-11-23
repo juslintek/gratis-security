@@ -58,8 +58,8 @@ final class WAF {
     public static function clear_blocks(): void {
         RequestGuard::clear_requests();
         $file = self::get_blocks_file();
-        if (@file_exists($file)) {
-            @unlink($file);
+        if (@file_exists($file)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            @unlink($file); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.unlink_unlink -- Low-level local filesystem/OS security operation.
         }
         if (function_exists('delete_option')) {
             delete_option('gratis_security_blocks');

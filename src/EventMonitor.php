@@ -26,8 +26,8 @@ final class EventMonitor {
         $candidates = [];
 
         $unit_path = '/etc/systemd/system/gratis-fim.service';
-        if (@is_readable($unit_path)) {
-            $unit_raw = (string) @file_get_contents($unit_path);
+        if (@is_readable($unit_path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            $unit_raw = (string) @file_get_contents($unit_path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
             $parsed   = ServerInspector::analyze_systemd_unit($unit_raw, '');
             if (!empty($parsed['log_path'])) {
                 $candidates[] = ['path' => (string) $parsed['log_path'], 'type' => 'inotify'];
@@ -49,7 +49,7 @@ final class EventMonitor {
         $candidates[] = ['path' => dirname($root_dir, 2) . '/shared/gratis-fim.jsonl', 'type' => 'inotify'];
 
         $audit_log = '/var/log/audit/audit.log';
-        if (@is_readable($audit_log)) {
+        if (@is_readable($audit_log)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             $candidates[] = ['path' => $audit_log, 'type' => 'auditd'];
         }
 
@@ -66,15 +66,15 @@ final class EventMonitor {
             }
             $seen[$norm] = true;
 
-            $exists   = @file_exists($path);
-            $readable = $exists && @is_readable($path);
+            $exists   = @file_exists($path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            $readable = $exists && @is_readable($path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             $sources[] = [
                 'path'     => $path,
                 'type'     => (string) $cand['type'],
                 'exists'   => $exists,
                 'readable' => $readable,
-                'size'     => $exists ? (int) @filesize($path) : 0,
-                'mtime'    => $exists ? (int) @filemtime($path) : 0,
+                'size'     => $exists ? (int) @filesize($path) : 0, // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                'mtime'    => $exists ? (int) @filemtime($path) : 0, // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             ];
         }
 
@@ -270,8 +270,8 @@ final class EventMonitor {
         if (!empty($manifest_hashes) && in_array($component, ['plugins', 'mu-plugins', 'themes'], true)) {
             $manifest_key = ltrim($rel_path, '/');
             if (isset($manifest_hashes[$manifest_key])) {
-                if ('' !== $full_path && @is_file($full_path) && @is_readable($full_path)) {
-                    $actual_sha = @hash_file('sha256', $full_path);
+                if ('' !== $full_path && @is_file($full_path) && @is_readable($full_path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                    $actual_sha = @hash_file('sha256', $full_path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                     if (is_string($actual_sha) && $actual_sha === $manifest_hashes[$manifest_key]) {
                         // File matches release manifest exactly; never fall through to runtime heuristics.
                         return null;
@@ -285,7 +285,7 @@ final class EventMonitor {
                             'File SHA-256 differs from release manifest'
                         );
                     }
-                } elseif (str_contains($event_upper, 'DELETE') && ('' === $full_path || !@file_exists($full_path))) {
+                } elseif (str_contains($event_upper, 'DELETE') && ('' === $full_path || !@file_exists($full_path))) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                     return self::make_detection(
                         $event,
                         'high',
@@ -295,7 +295,7 @@ final class EventMonitor {
                     );
                 }
             } else {
-                if (str_contains($event_upper, 'DELETE') && ('' === $full_path || !@file_exists($full_path))) {
+                if (str_contains($event_upper, 'DELETE') && ('' === $full_path || !@file_exists($full_path))) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                     // Ephemeral/temp file outside manifest cleaned up.
                     return null;
                 }
@@ -346,9 +346,9 @@ final class EventMonitor {
         $source_list = self::normalize_sources($sources ?? self::discover_log_sources($storage));
         $manifest    = self::load_manifest_hashes($root);
 
-        $lock_fp = @fopen($storage . '/fim-trail.lock', 'c+');
+        $lock_fp = @fopen($storage . '/fim-trail.lock', 'c+'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Low-level local filesystem/OS security operation.
         if ($lock_fp) {
-            @flock($lock_fp, LOCK_EX);
+            @flock($lock_fp, LOCK_EX); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         }
 
         try {
@@ -372,13 +372,13 @@ final class EventMonitor {
             foreach ($source_list as $src) {
                 $path = (string) $src['path'];
                 $type = (string) ($src['type'] ?? 'inotify');
-                if ('' === $path || !@is_file($path) || !@is_readable($path)) {
+                if ('' === $path || !@is_file($path) || !@is_readable($path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                     continue;
                 }
                 ++$sources_checked;
 
-                @clearstatcache(true, $path);
-                $stat = @stat($path);
+                @clearstatcache(true, $path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                $stat = @stat($path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 if (!is_array($stat)) {
                     continue;
                 }
@@ -394,12 +394,12 @@ final class EventMonitor {
                 }
 
                 if ($size > $offset) {
-                    $fp = @fopen($path, 'rb');
+                    $fp = @fopen($path, 'rb'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Low-level local filesystem/OS security operation.
                     if ($fp) {
-                        @fseek($fp, $offset);
+                        @fseek($fp, $offset); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                         $to_read = min(self::MAX_BYTES_PER_TRAIL, $size - $offset);
-                        $chunk   = ($to_read > 0) ? (string) @fread($fp, $to_read) : '';
-                        @fclose($fp);
+                        $chunk   = ($to_read > 0) ? (string) @fread($fp, $to_read) : ''; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fread -- Low-level local filesystem/OS security operation.
+                        @fclose($fp); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Low-level local filesystem/OS security operation.
 
                         $last_nl = strrpos($chunk, "\n");
                         if (false !== $last_nl) {
@@ -472,8 +472,8 @@ final class EventMonitor {
             ];
         } finally {
             if ($lock_fp) {
-                @flock($lock_fp, LOCK_UN);
-                @fclose($lock_fp);
+                @flock($lock_fp, LOCK_UN); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                @fclose($lock_fp); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Low-level local filesystem/OS security operation.
             }
         }
     }
@@ -529,7 +529,7 @@ final class EventMonitor {
             if ('' !== $source_filter && $type !== $source_filter) {
                 continue;
             }
-            if ('' === $path || !@is_file($path) || !@is_readable($path)) {
+            if ('' === $path || !@is_file($path) || !@is_readable($path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 continue;
             }
             $used_sources[] = $path;
@@ -657,9 +657,9 @@ final class EventMonitor {
         $storage = $storage_dir ?? FileIntegrity::get_storage_dir();
         self::ensure_dir($storage);
 
-        $lock_fp = @fopen($storage . '/fim-trail.lock', 'c+');
+        $lock_fp = @fopen($storage . '/fim-trail.lock', 'c+'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Low-level local filesystem/OS security operation.
         if ($lock_fp) {
-            @flock($lock_fp, LOCK_EX);
+            @flock($lock_fp, LOCK_EX); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         }
 
         try {
@@ -681,8 +681,8 @@ final class EventMonitor {
             return $updated;
         } finally {
             if ($lock_fp) {
-                @flock($lock_fp, LOCK_UN);
-                @fclose($lock_fp);
+                @flock($lock_fp, LOCK_UN); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                @fclose($lock_fp); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Low-level local filesystem/OS security operation.
             }
         }
     }
@@ -694,9 +694,9 @@ final class EventMonitor {
         $storage = $storage_dir ?? FileIntegrity::get_storage_dir();
         self::ensure_dir($storage);
 
-        $lock_fp = @fopen($storage . '/fim-trail.lock', 'c+');
+        $lock_fp = @fopen($storage . '/fim-trail.lock', 'c+'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Low-level local filesystem/OS security operation.
         if ($lock_fp) {
-            @flock($lock_fp, LOCK_EX);
+            @flock($lock_fp, LOCK_EX); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         }
 
         try {
@@ -723,8 +723,8 @@ final class EventMonitor {
             return $removed;
         } finally {
             if ($lock_fp) {
-                @flock($lock_fp, LOCK_UN);
-                @fclose($lock_fp);
+                @flock($lock_fp, LOCK_UN); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                @fclose($lock_fp); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Low-level local filesystem/OS security operation.
             }
         }
     }
@@ -743,9 +743,9 @@ final class EventMonitor {
         $parsed_filters = self::parse_detection_filters($filters);
         self::ensure_dir($storage);
 
-        $lock_fp = @fopen($storage . '/fim-trail.lock', 'c+');
+        $lock_fp = @fopen($storage . '/fim-trail.lock', 'c+'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Low-level local filesystem/OS security operation.
         if ($lock_fp) {
-            @flock($lock_fp, LOCK_EX);
+            @flock($lock_fp, LOCK_EX); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         }
 
         try {
@@ -771,8 +771,8 @@ final class EventMonitor {
             return $updated;
         } finally {
             if ($lock_fp) {
-                @flock($lock_fp, LOCK_UN);
-                @fclose($lock_fp);
+                @flock($lock_fp, LOCK_UN); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                @fclose($lock_fp); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Low-level local filesystem/OS security operation.
             }
         }
     }
@@ -789,9 +789,9 @@ final class EventMonitor {
         $manifest = self::load_manifest_hashes($root);
         self::ensure_dir($storage);
 
-        $lock_fp = @fopen($storage . '/fim-trail.lock', 'c+');
+        $lock_fp = @fopen($storage . '/fim-trail.lock', 'c+'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Low-level local filesystem/OS security operation.
         if ($lock_fp) {
-            @flock($lock_fp, LOCK_EX);
+            @flock($lock_fp, LOCK_EX); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         }
 
         try {
@@ -815,8 +815,8 @@ final class EventMonitor {
                     && isset($manifest[$rel])
                 ) {
                     $full = self::resolve_full_path($det, $root);
-                    if ('' !== $full && @is_file($full) && @is_readable($full)) {
-                        $actual_sha = @hash_file('sha256', $full);
+                    if ('' !== $full && @is_file($full) && @is_readable($full)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                        $actual_sha = @hash_file('sha256', $full); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                         if (is_string($actual_sha) && $actual_sha === $manifest[$rel]) {
                             $drop = true;
                         }
@@ -846,8 +846,8 @@ final class EventMonitor {
             ];
         } finally {
             if ($lock_fp) {
-                @flock($lock_fp, LOCK_UN);
-                @fclose($lock_fp);
+                @flock($lock_fp, LOCK_UN); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                @fclose($lock_fp); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Low-level local filesystem/OS security operation.
             }
         }
     }
@@ -924,14 +924,14 @@ final class EventMonitor {
      */
     private static function resolve_full_path(array $event, ?string $project_root = null): string {
         $raw_path = (string) ($event['raw_path'] ?? '');
-        if ('' !== $raw_path && @is_file($raw_path)) {
+        if ('' !== $raw_path && @is_file($raw_path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             return $raw_path;
         }
         $root = $project_root ?? FileIntegrity::get_project_root();
         $rel  = ltrim((string) ($event['path'] ?? ''), '/');
         if ('' !== $root && '' !== $rel) {
             $candidate = rtrim($root, '/') . '/' . $rel;
-            if (@is_file($candidate)) {
+            if (@is_file($candidate)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 return $candidate;
             }
         }
@@ -942,14 +942,14 @@ final class EventMonitor {
      * @return array<int,string>
      */
     private static function scan_suspicious_code(string $full_path): array {
-        if ('' === $full_path || !@is_file($full_path) || !@is_readable($full_path)) {
+        if ('' === $full_path || !@is_file($full_path) || !@is_readable($full_path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             return [];
         }
-        $size = (int) @filesize($full_path);
+        $size = (int) @filesize($full_path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         if ($size <= 0 || $size > 524288) {
             return [];
         }
-        $content = @file_get_contents($full_path);
+        $content = @file_get_contents($full_path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
         if (!is_string($content) || '' === $content) {
             return [];
         }
@@ -968,7 +968,7 @@ final class EventMonitor {
 
         $hits = [];
         foreach ($signatures as $label => $regex) {
-            if (1 === @preg_match($regex, $content)) {
+            if (1 === @preg_match($regex, $content)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 $hits[] = $label;
             }
         }
@@ -1007,15 +1007,15 @@ final class EventMonitor {
      */
     private static function load_manifest_hashes(string $root): ?array {
         $path = rtrim($root, '/') . '/SOURCE-MANIFEST.sha256';
-        if (!@is_file($path) || !@is_readable($path)) {
+        if (!@is_file($path) || !@is_readable($path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             return null;
         }
-        $fp = @fopen($path, 'rb');
+        $fp = @fopen($path, 'rb'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Low-level local filesystem/OS security operation.
         if (!$fp) {
             return null;
         }
         $hashes = [];
-        while (($line = fgets($fp)) !== false) {
+        for ($line = fgets($fp); false !== $line; $line = fgets($fp)) {
             $line = trim($line);
             if ('' === $line || !str_contains($line, '  ')) {
                 continue;
@@ -1026,7 +1026,7 @@ final class EventMonitor {
                 $hashes[$rel] = strtolower(trim($sha));
             }
         }
-        fclose($fp);
+        fclose($fp); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Streaming file handle close for security logs/locks.
         return empty($hashes) ? null : $hashes;
     }
 
@@ -1054,10 +1054,10 @@ final class EventMonitor {
      */
     private static function read_state_unlocked(string $storage): array {
         $path = rtrim($storage, '/') . '/' . self::STATE_FILE;
-        if (!@is_file($path) || !@is_readable($path)) {
+        if (!@is_file($path) || !@is_readable($path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             return ['sources' => []];
         }
-        $raw = (string) @file_get_contents($path);
+        $raw = (string) @file_get_contents($path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
         $dec = FileIntegrity::simd_decode($raw, true);
         if (!is_array($dec) || !isset($dec['sources']) || !is_array($dec['sources'])) {
             return ['sources' => []];
@@ -1078,15 +1078,15 @@ final class EventMonitor {
      */
     private static function read_all_detections_unlocked(string $storage): array {
         $path = rtrim($storage, '/') . '/' . self::DETECTIONS_FILE;
-        if (!@is_file($path) || !@is_readable($path)) {
+        if (!@is_file($path) || !@is_readable($path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             return [];
         }
-        $fp = @fopen($path, 'rb');
+        $fp = @fopen($path, 'rb'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Low-level local filesystem/OS security operation.
         if (!$fp) {
             return [];
         }
         $items = [];
-        while (($line = fgets($fp)) !== false) {
+        for ($line = fgets($fp); false !== $line; $line = fgets($fp)) {
             $line = trim($line);
             if ('' === $line) {
                 continue;
@@ -1096,7 +1096,7 @@ final class EventMonitor {
                 $items[] = $dec;
             }
         }
-        fclose($fp);
+        fclose($fp); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Streaming file handle close for security logs/locks.
         return $items;
     }
 
@@ -1106,8 +1106,11 @@ final class EventMonitor {
     private static function write_all_detections_unlocked(string $storage, array $detections): void {
         $path  = rtrim($storage, '/') . '/' . self::DETECTIONS_FILE;
         $lines = [];
+        $flags = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
         foreach ($detections as $det) {
-            $encoded = json_encode($det, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            $encoded = function_exists('wp_json_encode')
+                ? wp_json_encode($det, $flags)
+                : json_encode($det, $flags); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Fallback when executed outside WordPress runtime.
             if (is_string($encoded)) {
                 $lines[] = $encoded;
             }
@@ -1119,28 +1122,28 @@ final class EventMonitor {
     private static function atomic_write(string $target, string $content): void {
         $dir = dirname($target);
         self::ensure_dir($dir);
-        $tmp = @tempnam($dir, 'gs_');
+        $tmp = @tempnam($dir, 'gs_'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         if (false === $tmp) {
-            @file_put_contents($target, $content, LOCK_EX);
+            @file_put_contents($target, $content, LOCK_EX); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
             return;
         }
-        if (false !== @file_put_contents($tmp, $content)) {
-            @chmod($tmp, 0640);
-            if (!@rename($tmp, $target)) {
-                @unlink($tmp);
-                @file_put_contents($target, $content, LOCK_EX);
+        if (false !== @file_put_contents($tmp, $content)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
+            @chmod($tmp, 0640); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Low-level local filesystem/OS security operation.
+            if (!@rename($tmp, $target)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.rename_rename -- Low-level local filesystem/OS security operation.
+                @unlink($tmp); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.unlink_unlink -- Low-level local filesystem/OS security operation.
+                @file_put_contents($target, $content, LOCK_EX); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
             }
         } else {
-            @unlink($tmp);
+            @unlink($tmp); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.unlink_unlink -- Low-level local filesystem/OS security operation.
         }
     }
 
     private static function ensure_dir(string $dir): void {
-        if (!@is_dir($dir)) {
+        if (!@is_dir($dir)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             if (function_exists('wp_mkdir_p')) {
                 wp_mkdir_p($dir);
             } else {
-                @mkdir($dir, 0755, true);
+                @mkdir($dir, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Low-level local filesystem/OS security operation.
             }
         }
     }
@@ -1151,22 +1154,22 @@ final class EventMonitor {
      * @return array<int,string>
      */
     private static function tail_file_lines(string $path, int $max_lines, int $max_bytes): array {
-        $fp = @fopen($path, 'rb');
+        $fp = @fopen($path, 'rb'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Low-level local filesystem/OS security operation.
         if (!$fp) {
             return [];
         }
-        @fseek($fp, 0, SEEK_END);
-        $file_size = (int) @ftell($fp);
+        @fseek($fp, 0, SEEK_END); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+        $file_size = (int) @ftell($fp); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         if ($file_size <= 0) {
-            fclose($fp);
+            fclose($fp); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Streaming file handle close for security logs/locks.
             return [];
         }
 
         $read_len = min($file_size, $max_bytes);
         $start    = $file_size - $read_len;
-        @fseek($fp, $start);
-        $data = (string) @fread($fp, $read_len);
-        fclose($fp);
+        @fseek($fp, $start); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+        $data = (string) @fread($fp, $read_len); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fread -- Low-level local filesystem/OS security operation.
+        fclose($fp); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Streaming file handle close for security logs/locks.
 
         // Drop partial leading line when reading mid-file
         if ($start > 0) {

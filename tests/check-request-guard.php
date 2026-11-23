@@ -8,9 +8,9 @@ $tmp_wp      = $tmp_web . '/wp';
 $tmp_uploads = $tmp_web . '/app/uploads';
 $tmp_storage = $tmp_uploads . '/gratis-security';
 
-@mkdir($tmp_wp . '/wp-includes', 0755, true);
-@mkdir($tmp_uploads, 0755, true);
-@mkdir($tmp_web . '/app/plugins/demo-plugin', 0755, true);
+@mkdir($tmp_wp . '/wp-includes', 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
+@mkdir($tmp_uploads, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
+@mkdir($tmp_web . '/app/plugins/demo-plugin', 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
 
 define('ABSPATH', $tmp_wp . '/');
 define('WP_CONTENT_DIR', $tmp_web . '/app');
@@ -22,12 +22,12 @@ if (!function_exists('wp_upload_dir')) {
 }
 if (!function_exists('wp_mkdir_p')) {
     function wp_mkdir_p(string $target): bool {
-        return is_dir($target) || @mkdir($target, 0755, true);
+        return is_dir($target) || @mkdir($target, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
     }
 }
 if (!function_exists('get_option')) {
-    function get_option(string $option, mixed $default = false): mixed {
-        return $GLOBALS['gratis_test_options'][$option] ?? $default;
+    function get_option(string $option, mixed $default_value = false): mixed {
+        return $GLOBALS['gratis_test_options'][$option] ?? $default_value;
     }
 }
 if (!function_exists('update_option')) {
@@ -54,7 +54,7 @@ if (!function_exists('wp_schedule_event')) {
     }
 }
 if (!function_exists('__')) {
-    function __(string $text, string $domain = 'default'): string {
+    function __(string $text, string $domain = 'default'): string { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- Standalone CLI test fixture/stub.
         return $text;
     }
 }
@@ -87,14 +87,14 @@ function rm_rf(string $dir): void {
         if (is_dir($path) && !is_link($path)) {
             rm_rf($path);
         } else {
-            @unlink($path);
+            @unlink($path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.unlink_unlink -- Standalone CLI test fixture/stub.
         }
     }
-    @rmdir($dir);
+    @rmdir($dir); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Standalone CLI test fixture/stub.
 }
 
 try {
-    @mkdir($tmp_storage, 0755, true);
+    @mkdir($tmp_storage, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
 
     // 1. RequestGuard::ip_matches_cidr()
     assert(RequestGuard::ip_matches_cidr('192.168.1.42', '192.168.1.42') === true);
@@ -311,13 +311,13 @@ try {
 
     // 5. SetupWizard::run_auto_configure() & diagnose()
     $clean_php = $tmp_web . '/app/plugins/demo-plugin/clean.php';
-    file_put_contents($clean_php, "<?php\nreturn 'ok';\n");
-    file_put_contents($tmp_root . '/SOURCE-MANIFEST.sha256', hash_file('sha256', $clean_php) . "  web/app/plugins/demo-plugin/clean.php\n");
+    file_put_contents($clean_php, "<?php\nreturn 'ok';\n"); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
+    file_put_contents($tmp_root . '/SOURCE-MANIFEST.sha256', hash_file('sha256', $clean_php) . "  web/app/plugins/demo-plugin/clean.php\n"); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
 
     // Seed a false-positive detection matching manifest so run_auto_configure() purges it
-    file_put_contents(
+    file_put_contents( // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
         $tmp_storage . '/' . EventMonitor::DETECTIONS_FILE,
-        json_encode([
+        json_encode([ // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Standalone CLI test fixture/stub.
             'id'        => 'det_seed_fp',
             'rule'      => 'code_modified_runtime',
             'severity'  => 'medium',

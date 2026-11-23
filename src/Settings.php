@@ -359,7 +359,7 @@ final class Settings {
         echo '<h3 style="margin: 0 0 5px 0;">' . esc_html__('Failų būsena', 'gratis-security') . '</h3>';
         if ($report) {
             if ($changed_total > 0) {
-                echo '<p style="margin: 0; font-size: 13px; color: #d63638; font-weight: 600;">⚠ ' . sprintf(/* translators: %d count */ esc_html__('Pakeitimų: %d', 'gratis-security'), $changed_total) . '</p>';
+                echo '<p style="margin: 0; font-size: 13px; color: #d63638; font-weight: 600;">⚠ ' . sprintf(/* translators: %d count */ esc_html__('Pakeitimų: %d', 'gratis-security'), absint($changed_total)) . '</p>';
             } else {
                 echo '<p style="margin: 0; font-size: 13px; color: #46b450; font-weight: 600;">✓ ' . esc_html__('Visi parašai sutampa', 'gratis-security') . '</p>';
             }
@@ -985,14 +985,17 @@ final class Settings {
             wp_send_json_error(['message' => 'Unauthorized'], 403);
         }
 
-        $feed_url    = isset($_POST['signature_feed_url']) ? trim((string) wp_unslash($_POST['signature_feed_url'])) : '';
-        $ip_feed_url = isset($_POST['ip_feed_url']) ? trim((string) wp_unslash($_POST['ip_feed_url'])) : '';
-        $token       = isset($_POST['signature_feed_token']) ? sanitize_text_field(trim((string) wp_unslash($_POST['signature_feed_token']))) : '';
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitized immediately via esc_url_raw() below.
+        $feed_url = isset($_POST['signature_feed_url']) ? esc_url_raw(trim((string) wp_unslash($_POST['signature_feed_url']))) : '';
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitized immediately via esc_url_raw() below.
+        $ip_feed_url = isset($_POST['ip_feed_url']) ? esc_url_raw(trim((string) wp_unslash($_POST['ip_feed_url']))) : '';
+        $token       = isset($_POST['signature_feed_token']) ? sanitize_text_field(wp_unslash($_POST['signature_feed_token'])) : '';
 
         foreach (['signature_feed_url' => $feed_url, 'ip_feed_url' => $ip_feed_url] as $label => $u) {
             if ('' !== $u) {
                 $clean = esc_url_raw($u, ['https']);
                 if ('' === $clean || !str_starts_with(strtolower($clean), 'https://')) {
+                    /* translators: %s: form field name */
                     wp_send_json_error(['message' => sprintf(__('%s privalo prasidėti https://', 'gratis-security'), $label)], 400);
                 }
             }

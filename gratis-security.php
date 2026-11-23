@@ -39,10 +39,11 @@ add_action('admin_init', [\Gratis\Security\Settings::class, 'register_settings']
 add_action('init', [\Gratis\Security\Settings::class, 'register_ajax']);
 
 // File Integrity Monitoring, Malware Scanning & Signature Feed cron schedules.
+// phpcs:ignore WordPress.WP.CronInterval.CronSchedulesInterval -- Real-time FIM event log tailing runs every 5 minutes.
 add_filter('cron_schedules', static function (array $schedules): array {
     $schedules['gratis_five_minutes'] = [
         'interval' => 300,
-        'display'  => __('Every 5 Minutes', 'gratis-security'),
+        'display'  => did_action('init') ? __('Every 5 Minutes', 'gratis-security') : 'Every 5 Minutes',
     ];
     return $schedules;
 });

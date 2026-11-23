@@ -45,11 +45,12 @@ final class FileIntegrity {
 
         $htaccess = $base . '/.htaccess';
         if (!file_exists($htaccess)) {
-            @file_put_contents($htaccess, "Require all denied\nDeny from all\n");
+            @file_put_contents($htaccess, "Require all denied\nDeny from all\n"); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
         }
 
         $index = $base . '/index.php';
         if (!file_exists($index)) {
+            // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
             @file_put_contents($index, "<?php\n// Silence is golden.\n");
         }
 
@@ -68,7 +69,7 @@ final class FileIntegrity {
             try {
                 return simdjson_decode($json, $assoc);
             } catch (\Throwable) {
-                // Fallback to native json_decode if simdjson fails
+                return json_decode($json, $assoc);
             }
         }
         return json_decode($json, $assoc);
@@ -78,10 +79,12 @@ final class FileIntegrity {
      * Encode data to JSON with clean flags.
      */
     public static function simd_encode(mixed $data): string {
-        return (string) json_encode(
-            $data,
-            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT
-        );
+        $flags = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT;
+        if (function_exists('wp_json_encode')) {
+            return (string) wp_json_encode($data, $flags);
+        }
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Fallback when executed outside WordPress runtime.
+        return (string) json_encode($data, $flags);
     }
 
     /**
@@ -102,7 +105,7 @@ final class FileIntegrity {
         }
 
         try {
-            $test = @shell_exec('echo 1 2>/dev/null');
+            $test = @shell_exec('echo 1 2>/dev/null'); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec,WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level local filesystem/OS security operation.
             return is_string($test) && '1' === trim($test);
         } catch (\Throwable) {
             return false;
@@ -116,8 +119,8 @@ final class FileIntegrity {
      */
     public static function detect_server_capabilities(): array {
         $os_pretty = 'Unknown Linux/Unix';
-        if (@file_exists('/etc/os-release')) {
-            $os_data = @parse_ini_file('/etc/os-release');
+        if (@file_exists('/etc/os-release')) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            $os_data = @parse_ini_file('/etc/os-release'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             if (is_array($os_data) && !empty($os_data['PRETTY_NAME'])) {
                 $os_pretty = (string) $os_data['PRETTY_NAME'];
             }
@@ -132,12 +135,12 @@ final class FileIntegrity {
         $has_inotify = false;
         $inotify_path = '';
         if ($can_shell) {
-            if (@file_exists('/usr/bin/inotifywait')) {
+            if (@file_exists('/usr/bin/inotifywait')) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 $has_inotify = true;
                 $inotify_path = '/usr/bin/inotifywait';
             } elseif (self::command_exists('inotifywait')) {
                 $has_inotify = true;
-                $inotify_path = trim((string) @shell_exec('which inotifywait 2>/dev/null'));
+                $inotify_path = trim((string) @shell_exec('which inotifywait 2>/dev/null')); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec,WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level local filesystem/OS security operation.
             }
         }
 
@@ -145,34 +148,34 @@ final class FileIntegrity {
         $auditctl_path = '';
         $auditd_active = false;
         if ($can_shell) {
-            if (@file_exists('/usr/sbin/auditctl')) {
+            if (@file_exists('/usr/sbin/auditctl')) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 $has_auditctl = true;
                 $auditctl_path = '/usr/sbin/auditctl';
             } elseif (self::command_exists('auditctl')) {
                 $has_auditctl = true;
-                $auditctl_path = trim((string) @shell_exec('which auditctl 2>/dev/null'));
+                $auditctl_path = trim((string) @shell_exec('which auditctl 2>/dev/null')); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec,WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level local filesystem/OS security operation.
             }
 
             if ($has_auditctl) {
-                $audit_status = @shell_exec('systemctl is-active auditd 2>/dev/null');
+                $audit_status = @shell_exec('systemctl is-active auditd 2>/dev/null'); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec,WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level local filesystem/OS security operation.
                 if (is_string($audit_status) && trim($audit_status) === 'active') {
                     $auditd_active = true;
                 }
             }
         }
 
-        $has_aide = $can_shell && (@file_exists('/usr/sbin/aide') || @file_exists('/usr/bin/aide') || self::command_exists('aide'));
+        $has_aide = $can_shell && (@file_exists('/usr/sbin/aide') || @file_exists('/usr/bin/aide') || self::command_exists('aide')); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         $has_git = $can_shell && self::command_exists('git');
 
         $root_dir = self::get_project_root();
-        $source_manifest = @file_exists($root_dir . '/SOURCE-MANIFEST.sha256') ? $root_dir . '/SOURCE-MANIFEST.sha256' : null;
-        $composer_manifest = @file_exists($root_dir . '/COMPOSER-MANIFEST.sha256') ? $root_dir . '/COMPOSER-MANIFEST.sha256' : null;
+        $source_manifest = @file_exists($root_dir . '/SOURCE-MANIFEST.sha256') ? $root_dir . '/SOURCE-MANIFEST.sha256' : null; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+        $composer_manifest = @file_exists($root_dir . '/COMPOSER-MANIFEST.sha256') ? $root_dir . '/COMPOSER-MANIFEST.sha256' : null; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
 
         $revision = null;
-        if (@file_exists($root_dir . '/REVISION')) {
-            $revision = trim((string) @file_get_contents($root_dir . '/REVISION'));
-        } elseif ($has_git && @is_dir($root_dir . '/.git')) {
-            $git_rev = @shell_exec('cd ' . escapeshellarg($root_dir) . ' && git rev-parse --short HEAD 2>/dev/null');
+        if (@file_exists($root_dir . '/REVISION')) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            $revision = trim((string) @file_get_contents($root_dir . '/REVISION')); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
+        } elseif ($has_git && @is_dir($root_dir . '/.git')) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            $git_rev = @shell_exec('cd ' . escapeshellarg($root_dir) . ' && git rev-parse --short HEAD 2>/dev/null'); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec,WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level local filesystem/OS security operation.
             if (is_string($git_rev) && '' !== trim($git_rev)) {
                 $revision = trim($git_rev);
             }
@@ -223,7 +226,7 @@ final class FileIntegrity {
             'event_log'         => $event_log_file,
             'has_manifests'     => null !== $source_manifest,
             'cron_active'       => $is_cron_active,
-            'next_cron'         => $is_cron_active ? get_date_from_gmt(date('Y-m-d H:i:s', (int) wp_next_scheduled(self::CRON_HOOK))) : null,
+            'next_cron'         => $is_cron_active ? get_date_from_gmt(gmdate('Y-m-d H:i:s', (int) wp_next_scheduled(self::CRON_HOOK))) : null,
         ];
     }
 
@@ -358,7 +361,7 @@ final class FileIntegrity {
 
         // Save report directly to disk with SIMDJSON encoding (zero MySQL writes)
         $storage_dir = self::get_storage_dir();
-        @file_put_contents(
+        @file_put_contents( // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
             $storage_dir . '/' . self::REPORT_FILE,
             self::simd_encode($report),
             LOCK_EX
@@ -378,7 +381,7 @@ final class FileIntegrity {
             return null;
         }
 
-        $json = @file_get_contents($path);
+        $json = @file_get_contents($path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
         if (!is_string($json) || '' === $json) {
             return null;
         }
@@ -403,21 +406,21 @@ final class FileIntegrity {
 
         // Count lines
         $line_count = 0;
-        $handle = @fopen($manifest_path, 'r');
+        $handle = @fopen($manifest_path, 'r'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Low-level local filesystem/OS security operation.
         if ($handle) {
             while (!feof($handle)) {
                 if (fgets($handle) !== false) {
                     ++$line_count;
                 }
             }
-            fclose($handle);
+            fclose($handle); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Streaming file handle close for security logs/locks.
         }
         $result['checked'] = $line_count;
 
         // Fast path: shell sha256sum if available
         if (self::is_shell_available() && self::command_exists('sha256sum')) {
             $cmd = 'cd ' . escapeshellarg($root) . ' && sha256sum -c --quiet ' . escapeshellarg($manifest_path) . ' 2>&1';
-            $output = @shell_exec($cmd);
+            $output = @shell_exec($cmd); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec,WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level local filesystem/OS security operation.
 
             if (is_string($output) && '' !== trim($output)) {
                 $lines = explode("\n", trim($output));
@@ -443,8 +446,8 @@ final class FileIntegrity {
                             'path'      => $rel,
                             'component' => self::categorize_path($rel),
                             'status'    => 'modified',
-                            'size'      => file_exists($full_path) ? (int) @filesize($full_path) : 0,
-                            'mtime'     => file_exists($full_path) ? gmdate('Y-m-d H:i:s', (int) @filemtime($full_path)) : '',
+                            'size'      => file_exists($full_path) ? (int) @filesize($full_path) : 0, // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                            'mtime'     => file_exists($full_path) ? gmdate('Y-m-d H:i:s', (int) @filemtime($full_path)) : '', // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                         ];
                     }
                 }
@@ -453,12 +456,12 @@ final class FileIntegrity {
         }
 
         // Pure PHP streaming fallback (Shared Hosting safe)
-        $handle = @fopen($manifest_path, 'r');
+        $handle = @fopen($manifest_path, 'r'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Low-level local filesystem/OS security operation.
         if (!$handle) {
             return $result;
         }
 
-        while (($line = fgets($handle)) !== false) {
+        for ($line = fgets($handle); false !== $line; $line = fgets($handle)) {
             $line = trim($line);
             if ('' === $line || !str_contains($line, '  ')) {
                 continue;
@@ -483,12 +486,12 @@ final class FileIntegrity {
                     'path'      => $rel,
                     'component' => self::categorize_path($rel),
                     'status'    => 'modified',
-                    'size'      => (int) @filesize($full_path),
-                    'mtime'     => gmdate('Y-m-d H:i:s', (int) @filemtime($full_path)),
+                    'size'      => (int) @filesize($full_path), // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                    'mtime'     => gmdate('Y-m-d H:i:s', (int) @filemtime($full_path)), // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 ];
             }
         }
-        fclose($handle);
+        fclose($handle); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Streaming file handle close for security logs/locks.
 
         return $result;
     }
@@ -534,8 +537,8 @@ final class FileIntegrity {
                     'path'      => self::normalize_rel_path($full_path),
                     'component' => 'core',
                     'status'    => 'modified',
-                    'size'      => (int) @filesize($full_path),
-                    'mtime'     => gmdate('Y-m-d H:i:s', (int) @filemtime($full_path)),
+                    'size'      => (int) @filesize($full_path), // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                    'mtime'     => gmdate('Y-m-d H:i:s', (int) @filemtime($full_path)), // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 ];
             }
         }
@@ -576,7 +579,7 @@ final class FileIntegrity {
             $checksum_data = null;
 
             if (file_exists($cache_file)) {
-                $checksum_data = self::simd_decode((string) @file_get_contents($cache_file), true);
+                $checksum_data = self::simd_decode((string) @file_get_contents($cache_file), true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
             }
 
             if (!is_array($checksum_data)) {
@@ -590,7 +593,7 @@ final class FileIntegrity {
                 $body = wp_remote_retrieve_body($response);
                 $checksum_data = self::simd_decode($body, true);
                 if (is_array($checksum_data) && !empty($checksum_data['files'])) {
-                    @file_put_contents($cache_file, self::simd_encode($checksum_data), LOCK_EX);
+                    @file_put_contents($cache_file, self::simd_encode($checksum_data), LOCK_EX); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
                 } else {
                     continue;
                 }
@@ -631,8 +634,8 @@ final class FileIntegrity {
                         'path'      => self::normalize_rel_path($full_path),
                         'component' => 'plugins',
                         'status'    => 'modified',
-                        'size'      => (int) @filesize($full_path),
-                        'mtime'     => gmdate('Y-m-d H:i:s', (int) @filemtime($full_path)),
+                        'size'      => (int) @filesize($full_path), // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                        'mtime'     => gmdate('Y-m-d H:i:s', (int) @filemtime($full_path)), // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                     ];
                 }
             }
@@ -686,7 +689,7 @@ final class FileIntegrity {
                 }
             }
         } catch (\Throwable) {
-            // In case open_basedir or permission issues prevent full recursion
+            return $rogue;
         }
 
         return $rogue;
@@ -704,7 +707,7 @@ final class FileIntegrity {
         $cache_file = $storage . '/' . self::CORE_CACHE_PREFIX . $version . '-' . $locale . '.json';
 
         if (file_exists($cache_file)) {
-            $data = self::simd_decode((string) @file_get_contents($cache_file), true);
+            $data = self::simd_decode((string) @file_get_contents($cache_file), true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
             if (is_array($data)) {
                 return $data;
             }
@@ -728,7 +731,7 @@ final class FileIntegrity {
         }
 
         $checksums = (array) $json['checksums'];
-        @file_put_contents($cache_file, self::simd_encode($checksums), LOCK_EX);
+        @file_put_contents($cache_file, self::simd_encode($checksums), LOCK_EX); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
 
         return $checksums;
     }
@@ -774,12 +777,12 @@ final class FileIntegrity {
                     }
                 }
             } catch (\Throwable) {
-                // Ignore directories with restricted read permissions
+                continue;
             }
         }
 
         $storage = self::get_storage_dir();
-        @file_put_contents(
+        @file_put_contents( // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
             $storage . '/' . self::BASELINE_FILE,
             self::simd_encode([
                 'built_at' => gmdate('c'),
@@ -806,7 +809,7 @@ final class FileIntegrity {
             return $result;
         }
 
-        $data = self::simd_decode((string) @file_get_contents($baseline_path), true);
+        $data = self::simd_decode((string) @file_get_contents($baseline_path), true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
         if (!is_array($data) || empty($data['hashes']) || !is_array($data['hashes'])) {
             return $result;
         }
@@ -834,8 +837,8 @@ final class FileIntegrity {
                     'path'      => $rel,
                     'component' => self::categorize_path($rel),
                     'status'    => 'modified',
-                    'size'      => (int) @filesize($full_path),
-                    'mtime'     => gmdate('Y-m-d H:i:s', (int) @filemtime($full_path)),
+                    'size'      => (int) @filesize($full_path), // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                    'mtime'     => gmdate('Y-m-d H:i:s', (int) @filemtime($full_path)), // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 ];
             }
         }
@@ -867,9 +870,9 @@ final class FileIntegrity {
         $malware_hits = self::check_suspicious_patterns($full_path);
 
         // 1. Git diff (if available)
-        if (self::is_shell_available() && self::command_exists('git') && @is_dir($root . '/.git')) {
+        if (self::is_shell_available() && self::command_exists('git') && @is_dir($root . '/.git')) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             $cmd = 'cd ' . escapeshellarg($root) . ' && git diff -- ' . escapeshellarg($relative_path) . ' 2>&1';
-            $diff_output = @shell_exec($cmd);
+            $diff_output = @shell_exec($cmd); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec,WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level local filesystem/OS security operation.
             if (is_string($diff_output) && '' !== trim($diff_output)) {
                 return [
                     'success'      => true,
@@ -888,7 +891,7 @@ final class FileIntegrity {
             $upstream = wp_remote_get($raw_url, ['timeout' => 5]);
             if (!is_wp_error($upstream) && 200 === wp_remote_retrieve_response_code($upstream)) {
                 $orig_content = wp_remote_retrieve_body($upstream);
-                $curr_content = (string) @file_get_contents($full_path);
+                $curr_content = (string) @file_get_contents($full_path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
                 $diff = self::compute_unified_diff($orig_content, $curr_content, "upstream/$core_sub", $relative_path);
                 return [
                     'success'      => true,
@@ -912,7 +915,7 @@ final class FileIntegrity {
                 $upstream = wp_remote_get($svn_url, ['timeout' => 5]);
                 if (!is_wp_error($upstream) && 200 === wp_remote_retrieve_response_code($upstream)) {
                     $orig_content = wp_remote_retrieve_body($upstream);
-                    $curr_content = (string) @file_get_contents($full_path);
+                    $curr_content = (string) @file_get_contents($full_path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
                     $diff = self::compute_unified_diff($orig_content, $curr_content, "wporg/$slug/$file_in_plugin", $relative_path);
                     return [
                         'success'      => true,
@@ -925,12 +928,12 @@ final class FileIntegrity {
         }
 
         // 4. File preview with security metrics
-        $mtime = gmdate('Y-m-d H:i:s', (int) @filemtime($full_path));
-        $size  = @filesize($full_path) ?: 0;
-        $perms = substr(sprintf('%o', @fileperms($full_path)), -4);
+        $mtime = gmdate('Y-m-d H:i:s', (int) @filemtime($full_path)); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+        $size  = @filesize($full_path) ?: 0; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+        $perms = substr(sprintf('%o', @fileperms($full_path)), -4); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         $sha   = hash_file('sha256', $full_path);
 
-        $preview = (string) @file_get_contents($full_path);
+        $preview = (string) @file_get_contents($full_path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
         if (strlen($preview) > 50000) {
             $preview = substr($preview, 0, 50000) . "\n\n... [Failo peržiūra apribota iki 50KB] ...";
         }
@@ -1003,7 +1006,7 @@ final class FileIntegrity {
      */
     private static function check_suspicious_patterns(string $path): array {
         $hits = [];
-        $content = @file_get_contents($path);
+        $content = @file_get_contents($path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
         if (!is_string($content) || '' === $content) {
             return $hits;
         }
@@ -1019,7 +1022,7 @@ final class FileIntegrity {
         ];
 
         foreach ($patterns as $pattern => $label) {
-            if (str_contains($content, $pattern) || 1 === @preg_match("/{$pattern}/i", $content)) {
+            if (str_contains($content, $pattern) || 1 === @preg_match("/{$pattern}/i", $content)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 $hits[] = $label;
             }
         }
@@ -1040,7 +1043,7 @@ final class FileIntegrity {
             return [];
         }
 
-        $fp = @fopen($log_file, 'r');
+        $fp = @fopen($log_file, 'r'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Low-level local filesystem/OS security operation.
         if (!$fp) {
             return [];
         }
@@ -1054,13 +1057,13 @@ final class FileIntegrity {
             $read_size = min($buffer_size, $file_size);
             $file_size -= $read_size;
             fseek($fp, $file_size);
-            $chunk = fread($fp, $read_size);
+            $chunk = fread($fp, $read_size); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread -- Streaming bounded read of security log/file.
             $data = $chunk . $data;
             if (substr_count($data, "\n") > $limit + 1) {
                 break;
             }
         }
-        fclose($fp);
+        fclose($fp); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Streaming file handle close for security logs/locks.
 
         $raw_lines = array_filter(array_map('trim', explode("\n", $data)));
         $parsed = [];
@@ -1151,11 +1154,11 @@ final class FileIntegrity {
     public static function get_project_root(): string {
         if (defined('WP_CONTENT_DIR')) {
             $parent = dirname(WP_CONTENT_DIR);
-            if (@file_exists($parent . '/SOURCE-MANIFEST.sha256') || @file_exists($parent . '/composer.json')) {
+            if (@file_exists($parent . '/SOURCE-MANIFEST.sha256') || @file_exists($parent . '/composer.json')) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 return $parent;
             }
             $grand = dirname($parent);
-            if (@file_exists($grand . '/SOURCE-MANIFEST.sha256') || @file_exists($grand . '/composer.json')) {
+            if (@file_exists($grand . '/SOURCE-MANIFEST.sha256') || @file_exists($grand . '/composer.json')) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 return $grand;
             }
         }
@@ -1170,7 +1173,7 @@ final class FileIntegrity {
             return false;
         }
         $whereIsCommand = (PHP_OS === 'WINNT') ? 'where' : 'which';
-        $output = @shell_exec("$whereIsCommand " . escapeshellarg($cmd) . ' 2>/dev/null');
+        $output = @shell_exec("$whereIsCommand " . escapeshellarg($cmd) . ' 2>/dev/null'); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec,WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level local filesystem/OS security operation.
         return is_string($output) && '' !== trim($output);
     }
 
@@ -1181,7 +1184,7 @@ final class FileIntegrity {
         $from_lines = explode("\n", str_replace("\r\n", "\n", $from));
         $to_lines   = explode("\n", str_replace("\r\n", "\n", $to));
 
-        $diff = "--- " . $from_name . "\n+++ " . $to_name . "\n";
+        $diff = '--- ' . $from_name . "\n+++ " . $to_name . "\n";
         $from_count = count($from_lines);
         $to_count   = count($to_lines);
         $max = max($from_count, $to_count);
@@ -1193,16 +1196,16 @@ final class FileIntegrity {
 
             if ($f !== $t) {
                 if (null !== $f) {
-                    $hunk[] = "- " . $f;
+                    $hunk[] = '- ' . $f;
                 }
                 if (null !== $t) {
-                    $hunk[] = "+ " . $t;
+                    $hunk[] = '+ ' . $t;
                 }
             }
         }
 
         if (empty($hunk)) {
-            return "No line changes detected (whitespace or binary difference).";
+            return 'No line changes detected (whitespace or binary difference).';
         }
 
         return $diff . implode("\n", array_slice($hunk, 0, 500));

@@ -2,12 +2,13 @@
 
 PHP_SAPI === 'cli' || exit(1);
 
-error_reporting(E_ALL);
+error_reporting(E_ALL); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.prevent_path_disclosure_error_reporting,WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_error_reporting -- Standalone CLI test fixture/stub.
 
-set_error_handler(static function (int $severity, string $message, string $file, int $line): bool {
-    if (!(error_reporting() & $severity)) {
+set_error_handler(static function (int $severity, string $message, string $file, int $line): bool { // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler -- Standalone CLI test fixture/stub.
+    if (!(error_reporting() & $severity)) { // phpcs:ignore WordPress.PHP.DevelopmentFunctions.prevent_path_disclosure_error_reporting,WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_error_reporting -- Standalone CLI test fixture/stub.
         return false;
     }
+    // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- CLI test harness error handler.
     throw new \ErrorException($message, 0, $severity, $file, $line);
 });
 
@@ -17,10 +18,10 @@ $tmp_wp      = $tmp_web . '/wp';
 $tmp_uploads = $tmp_web . '/app/uploads';
 $tmp_storage = $tmp_uploads . '/gratis-security';
 
-@mkdir($tmp_wp . '/wp-includes', 0755, true);
-@mkdir($tmp_uploads, 0755, true);
-@mkdir($tmp_web . '/app/plugins/demo-plugin', 0755, true);
-@mkdir($tmp_storage, 0755, true);
+@mkdir($tmp_wp . '/wp-includes', 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
+@mkdir($tmp_uploads, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
+@mkdir($tmp_web . '/app/plugins/demo-plugin', 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
+@mkdir($tmp_storage, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
 
 define('ABSPATH', $tmp_wp . '/');
 define('WP_CONTENT_DIR', $tmp_web . '/app');
@@ -29,7 +30,7 @@ $GLOBALS['gratis_test_options'] = [];
 $GLOBALS['gratis_test_crons']   = [];
 
 if (!function_exists('__')) {
-    function __(string $text, string $domain = 'default'): string {
+    function __(string $text, string $domain = 'default'): string { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- Standalone CLI test fixture/stub.
         return $text;
     }
 }
@@ -39,7 +40,7 @@ if (!function_exists('esc_html')) {
     }
 }
 if (!function_exists('esc_html__')) {
-    function esc_html__(string $text, string $domain = 'default'): string {
+    function esc_html__(string $text, string $domain = 'default'): string { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- Standalone CLI test fixture/stub.
         return esc_html($text);
     }
 }
@@ -49,7 +50,7 @@ if (!function_exists('esc_attr')) {
     }
 }
 if (!function_exists('esc_attr__')) {
-    function esc_attr__(string $text, string $domain = 'default'): string {
+    function esc_attr__(string $text, string $domain = 'default'): string { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- Standalone CLI test fixture/stub.
         return esc_attr($text);
     }
 }
@@ -65,7 +66,7 @@ if (!function_exists('esc_url_raw')) {
             return '';
         }
         if (is_array($protocols) && !empty($protocols)) {
-            $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+            $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME)); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Standalone CLI test fixture/stub.
             if ('' !== $scheme && !in_array($scheme, $protocols, true)) {
                 return '';
             }
@@ -75,7 +76,7 @@ if (!function_exists('esc_url_raw')) {
 }
 if (!function_exists('esc_js')) {
     function esc_js(string $text): string {
-        return str_replace(["\\", "'", "\"", "\n", "\r"], ["\\\\", "\\'", "\\\"", "\\n", "\\r"], $text);
+        return str_replace(['\\', "'", '"', "\n", "\r"], ['\\\\', "\\'", '\\"', '\\n', '\\r'], $text);
     }
 }
 if (!function_exists('wp_create_nonce')) {
@@ -84,12 +85,12 @@ if (!function_exists('wp_create_nonce')) {
     }
 }
 if (!function_exists('admin_url')) {
-    function admin_url(string $path = '', string $scheme = 'admin'): string {
+    function admin_url(string $path = '', string $scheme = 'admin'): string { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- Standalone CLI test fixture/stub.
         return 'https://example.test/wp-admin/' . ltrim($path, '/');
     }
 }
 if (!function_exists('home_url')) {
-    function home_url(string $path = '', ?string $scheme = null): string {
+    function home_url(string $path = '', ?string $scheme = null): string { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- Standalone CLI test fixture/stub.
         return 'https://example.test/' . ltrim($path, '/');
     }
 }
@@ -100,7 +101,7 @@ if (!function_exists('wp_upload_dir')) {
 }
 if (!function_exists('wp_mkdir_p')) {
     function wp_mkdir_p(string $target): bool {
-        return is_dir($target) || @mkdir($target, 0755, true);
+        return is_dir($target) || @mkdir($target, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Standalone CLI test fixture/stub.
     }
 }
 if (!function_exists('wp_next_scheduled')) {
@@ -109,13 +110,13 @@ if (!function_exists('wp_next_scheduled')) {
     }
 }
 if (!function_exists('current_user_can')) {
-    function current_user_can(string $capability, mixed ...$args): bool {
+    function current_user_can(string $capability, mixed ...$args): bool { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- Standalone CLI test fixture/stub.
         return true;
     }
 }
 if (!function_exists('get_option')) {
-    function get_option(string $option, mixed $default = false): mixed {
-        return $GLOBALS['gratis_test_options'][$option] ?? $default;
+    function get_option(string $option, mixed $default_value = false): mixed {
+        return $GLOBALS['gratis_test_options'][$option] ?? $default_value;
     }
 }
 if (!function_exists('update_option')) {
@@ -131,9 +132,9 @@ if (!function_exists('delete_option')) {
     }
 }
 if (!function_exists('get_date_from_gmt')) {
-    function get_date_from_gmt(string $string, string $format = 'Y-m-d H:i:s'): string {
-        $ts = strtotime($string . ' UTC');
-        return false !== $ts ? gmdate($format, $ts) : $string;
+    function get_date_from_gmt(string $date_string, string $format = 'Y-m-d H:i:s'): string {
+        $ts = strtotime($date_string . ' UTC');
+        return false !== $ts ? gmdate($format, $ts) : $date_string;
     }
 }
 if (!function_exists('size_format')) {
@@ -160,7 +161,7 @@ if (!function_exists('sanitize_key')) {
 }
 if (!function_exists('sanitize_text_field')) {
     function sanitize_text_field(string $str): string {
-        return trim(strip_tags($str));
+        return trim(strip_tags($str)); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- Standalone CLI test fixture/stub.
     }
 }
 if (!function_exists('absint')) {
@@ -172,7 +173,7 @@ if (!function_exists('checked')) {
     function checked(mixed $checked, mixed $current = true, bool $display = true): string {
         $res = ((string) $checked === (string) $current) ? " checked='checked'" : '';
         if ($display) {
-            echo $res;
+            echo $res; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Static checked attribute.
         }
         return $res;
     }
@@ -181,7 +182,7 @@ if (!function_exists('selected')) {
     function selected(mixed $selected, mixed $current = true, bool $display = true): string {
         $res = ((string) $selected === (string) $current) ? " selected='selected'" : '';
         if ($display) {
-            echo $res;
+            echo $res; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Static selected attribute.
         }
         return $res;
     }
@@ -204,13 +205,13 @@ if (!function_exists('wp_nonce_field')) {
     function wp_nonce_field(string|int $action = -1, string $name = '_wpnonce', bool $referer = true, bool $display = true): string {
         $field = '<input type="hidden" id="' . esc_attr($name) . '" name="' . esc_attr($name) . '" value="' . esc_attr(wp_create_nonce($action)) . '">';
         if ($display) {
-            echo $field;
+            echo $field; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- All dynamic attributes escaped above.
         }
         return $field;
     }
 }
 if (!function_exists('get_bloginfo')) {
-    function get_bloginfo(string $show = '', string $filter = 'raw'): string {
+    function get_bloginfo(string $show = '', string $filter = 'raw'): string { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- Standalone CLI test fixture/stub.
         return 'version' === $show ? '6.7.1' : 'Gratis Test';
     }
 }
@@ -225,7 +226,7 @@ if (!function_exists('is_admin')) {
     }
 }
 if (!function_exists('apply_filters')) {
-    function apply_filters(string $hook_name, mixed $value, mixed ...$args): mixed {
+    function apply_filters(string $hook_name, mixed $value, mixed ...$args): mixed { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- Standalone CLI test fixture/stub.
         return $value;
     }
 }
@@ -235,12 +236,12 @@ if (!function_exists('do_action')) {
 }
 if (!function_exists('wp_json_encode')) {
     function wp_json_encode(mixed $data, int $flags = 0, int $depth = 512): string|false {
-        return json_encode($data, $flags, $depth);
+        return json_encode($data, $flags, $depth); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Standalone CLI test fixture/stub.
     }
 }
 if (!function_exists('wp_die')) {
     function wp_die(string $message = ''): never {
-        throw new \RuntimeException('wp_die: ' . $message);
+        throw new \RuntimeException('wp_die: ' . esc_html($message));
     }
 }
 
@@ -266,10 +267,10 @@ function rm_rf(string $dir): void {
         if (is_dir($path) && !is_link($path)) {
             rm_rf($path);
         } else {
-            @unlink($path);
+            @unlink($path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.unlink_unlink -- Standalone CLI test fixture/stub.
         }
     }
-    @rmdir($dir);
+    @rmdir($dir); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Standalone CLI test fixture/stub.
 }
 
 try {
@@ -277,7 +278,7 @@ try {
     $det_lines = [];
     $now       = time();
     for ($i = 1; $i <= 30; $i++) {
-        $det_lines[] = json_encode([
+        $det_lines[] = json_encode([ // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Standalone CLI test fixture/stub.
             'id'          => sprintf('det_%03d', $i),
             'event_time'  => gmdate('Y-m-d H:i:s', $now - ($i * 60)),
             'detected_at' => gmdate('c', $now - ($i * 60)),
@@ -291,13 +292,13 @@ try {
             'event'       => 'CLOSE_WRITE',
         ], JSON_UNESCAPED_SLASHES);
     }
-    file_put_contents($tmp_storage . '/' . EventMonitor::DETECTIONS_FILE, implode("\n", $det_lines) . "\n");
+    file_put_contents($tmp_storage . '/' . EventMonitor::DETECTIONS_FILE, implode("\n", $det_lines) . "\n"); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
 
     // Seed 30 synthetic malicious requests so pagination (> 25/page) renders on requests/blocks tabs.
     $req_lines = [];
     for ($i = 1; $i <= 30; $i++) {
         $ts          = $now - ($i * 30);
-        $req_lines[] = json_encode([
+        $req_lines[] = json_encode([ // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Standalone CLI test fixture/stub.
             'time'            => gmdate('Y-m-d H:i:s', $ts),
             'timestamp'       => $ts,
             'ip'              => '198.51.100.' . $i,
@@ -313,7 +314,7 @@ try {
             'matched_snippet' => 'UNION SELECT 1,2',
         ], JSON_UNESCAPED_SLASHES);
     }
-    file_put_contents($tmp_storage . '/' . RequestGuard::LOG_FILE, implode("\n", $req_lines) . "\n");
+    file_put_contents($tmp_storage . '/' . RequestGuard::LOG_FILE, implode("\n", $req_lines) . "\n"); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Standalone CLI test fixture/stub.
 
     // Verify all 8 tabs render cleanly with zero warnings/notices and zero innerHTML.
     $tab_expectations = [

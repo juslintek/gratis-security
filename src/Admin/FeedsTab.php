@@ -124,10 +124,10 @@ final class FeedsTab {
      */
     private static function has_cached_wp_checksums(): bool {
         $dir = FileIntegrity::get_storage_dir();
-        if (!@is_dir($dir)) {
+        if (!@is_dir($dir)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             return false;
         }
-        $matches = @glob($dir . '/' . FileIntegrity::CORE_CACHE_PREFIX . '*.json');
+        $matches = @glob($dir . '/' . FileIntegrity::CORE_CACHE_PREFIX . '*.json'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         return is_array($matches) && !empty($matches);
     }
 

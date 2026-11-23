@@ -24,19 +24,19 @@ final class ServerInspector {
 
         $user = '';
         if ($uid >= 0 && function_exists('posix_getpwuid')) {
-            $pw = @posix_getpwuid($uid);
+            $pw = @posix_getpwuid($uid); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             if (is_array($pw) && !empty($pw['name'])) {
                 $user = (string) $pw['name'];
             }
         }
         if ('' === $user) {
-            $current = @get_current_user();
+            $current = @get_current_user(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             $user = (is_string($current) && '' !== $current) ? $current : 'unknown';
         }
 
         $group = '';
         if ($gid >= 0 && function_exists('posix_getgrgid')) {
-            $gr = @posix_getgrgid($gid);
+            $gr = @posix_getgrgid($gid); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             if (is_array($gr) && !empty($gr['name'])) {
                 $group = (string) $gr['name'];
             }
@@ -46,24 +46,24 @@ final class ServerInspector {
         }
 
         $selinux = 'unknown';
-        if (@is_readable('/sys/fs/selinux/enforce')) {
-            $enforce = trim((string) @file_get_contents('/sys/fs/selinux/enforce'));
+        if (@is_readable('/sys/fs/selinux/enforce')) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            $enforce = trim((string) @file_get_contents('/sys/fs/selinux/enforce')); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
             if ('1' === $enforce) {
                 $selinux = 'enforcing';
             } elseif ('0' === $enforce) {
                 $selinux = 'permissive';
             }
         } elseif (FileIntegrity::is_shell_available()) {
-            $out = @shell_exec('getenforce 2>/dev/null');
+            $out = @shell_exec('getenforce 2>/dev/null'); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec,WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level local filesystem/OS security operation.
             if (is_string($out) && '' !== trim($out)) {
                 $val = strtolower(trim($out));
                 if (in_array($val, ['enforcing', 'permissive', 'disabled'], true)) {
                     $selinux = $val;
                 }
-            } elseif (PHP_OS_FAMILY === 'Linux' && !@is_dir('/sys/fs/selinux')) {
+            } elseif (PHP_OS_FAMILY === 'Linux' && !@is_dir('/sys/fs/selinux')) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 $selinux = 'disabled';
             }
-        } elseif (PHP_OS_FAMILY === 'Linux' && !@is_dir('/sys/fs/selinux')) {
+        } elseif (PHP_OS_FAMILY === 'Linux' && !@is_dir('/sys/fs/selinux')) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             $selinux = 'disabled';
         }
 
@@ -88,8 +88,8 @@ final class ServerInspector {
         $os_family_raw = $php_os_family ?? PHP_OS_FAMILY;
         $machine_val   = $machine ?? php_uname('m');
 
-        if (null === $os_release_content && @is_readable('/etc/os-release')) {
-            $raw = @file_get_contents('/etc/os-release');
+        if (null === $os_release_content && @is_readable('/etc/os-release')) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            $raw = @file_get_contents('/etc/os-release'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
             if (is_string($raw)) {
                 $os_release_content = $raw;
             }
@@ -163,9 +163,9 @@ final class ServerInspector {
         $init_system = 'none';
         if ('macos' === $family) {
             $init_system = 'launchd';
-        } elseif (@is_dir('/run/systemd/system')) {
+        } elseif (@is_dir('/run/systemd/system')) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             $init_system = 'systemd';
-        } elseif (@is_dir('/run/openrc')) {
+        } elseif (@is_dir('/run/openrc')) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             $init_system = 'openrc';
         }
 
@@ -287,7 +287,7 @@ final class ServerInspector {
                 $issues[] = 'Single backslash in --exclude (use \\\\.git for systemd)';
             }
 
-            $real_web = @realpath($expected_web_dir);
+            $real_web = @realpath($expected_web_dir); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             $has_expected = str_contains($exec_start, $expected_web_dir)
                 || (is_string($real_web) && '' !== $real_web && str_contains($exec_start, $real_web));
             if (!$has_expected) {
@@ -313,7 +313,7 @@ final class ServerInspector {
      * @return array<string,mixed>
      */
     public static function analyze_audit_rules(string $rules_text, string $expected_web_dir): array {
-        $real_web      = @realpath($expected_web_dir);
+        $real_web      = @realpath($expected_web_dir); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         $matched_lines = [];
 
         foreach (preg_split('/\r?\n/', $rules_text) ?: [] as $raw_line) {
@@ -378,21 +378,21 @@ final class ServerInspector {
      * @return array<int,array<string,mixed>>
      */
     public static function detect_processes(string $expected_web_dir, bool $can_shell): array {
-        $real_web  = @realpath($expected_web_dir);
+        $real_web  = @realpath($expected_web_dir); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         $processes = [];
 
-        if (@is_dir('/proc') && @is_readable('/proc')) {
-            $entries = @scandir('/proc');
+        if (@is_dir('/proc') && @is_readable('/proc')) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            $entries = @scandir('/proc'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             if (is_array($entries)) {
                 foreach ($entries as $entry) {
                     if (!ctype_digit($entry)) {
                         continue;
                     }
                     $cmdline_path = "/proc/{$entry}/cmdline";
-                    if (!@is_readable($cmdline_path)) {
+                    if (!@is_readable($cmdline_path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                         continue;
                     }
-                    $raw_cmd = @file_get_contents($cmdline_path);
+                    $raw_cmd = @file_get_contents($cmdline_path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
                     if (!is_string($raw_cmd) || '' === $raw_cmd) {
                         continue;
                     }
@@ -403,12 +403,12 @@ final class ServerInspector {
 
                     $user = 'unknown';
                     $status_path = "/proc/{$entry}/status";
-                    if (@is_readable($status_path)) {
-                        $status_raw = (string) @file_get_contents($status_path);
+                    if (@is_readable($status_path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                        $status_raw = (string) @file_get_contents($status_path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
                         if (1 === preg_match('/^Uid:\s*(\d+)/m', $status_raw, $m)) {
                             $uid = (int) $m[1];
                             if (function_exists('posix_getpwuid')) {
-                                $pw = @posix_getpwuid($uid);
+                                $pw = @posix_getpwuid($uid); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                                 $user = (is_array($pw) && !empty($pw['name'])) ? (string) $pw['name'] : (string) $uid;
                             } else {
                                 $user = (string) $uid;
@@ -430,7 +430,7 @@ final class ServerInspector {
         }
 
         if (empty($processes) && $can_shell) {
-            $ps_out = @shell_exec('ps -eo pid=,user=,args= 2>/dev/null');
+            $ps_out = @shell_exec('ps -eo pid=,user=,args= 2>/dev/null'); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec,WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level local filesystem/OS security operation.
             if (is_string($ps_out) && '' !== trim($ps_out)) {
                 foreach (preg_split('/\r?\n/', trim($ps_out)) ?: [] as $line) {
                     if (1 !== preg_match('/^\s*(\d+)\s+(\S+)\s+(.+)$/', $line, $m)) {
@@ -463,18 +463,18 @@ final class ServerInspector {
      * Resolve the active web root directory.
      */
     public static function get_web_dir(): string {
-        if (@is_dir('/var/www/12fa/deploy/current/web')) {
+        if (@is_dir('/var/www/12fa/deploy/current/web')) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             return '/var/www/12fa/deploy/current/web';
         }
         $root = FileIntegrity::get_project_root();
-        return @is_dir($root . '/web') ? ($root . '/web') : $root;
+        return @is_dir($root . '/web') ? ($root . '/web') : $root; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
     }
 
     /**
      * Resolve the WordPress core directory used by WP-CLI --path.
      */
     public static function get_wp_path(string $web_dir): string {
-        return @is_dir($web_dir . '/wp') ? ($web_dir . '/wp') : rtrim(ABSPATH, '/');
+        return @is_dir($web_dir . '/wp') ? ($web_dir . '/wp') : rtrim(ABSPATH, '/'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
     }
 
     /**
@@ -485,10 +485,10 @@ final class ServerInspector {
     public static function is_symlink_deploy(string $web_dir): array {
         $cur = rtrim($web_dir, '/');
         for ($i = 0; $i < 3 && '' !== $cur && '/' !== $cur; $i++) {
-            if (@is_link($cur)) {
-                $resolved = @realpath($web_dir);
+            if (@is_link($cur)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                $resolved = @realpath($web_dir); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 if (!is_string($resolved) || '' === $resolved) {
-                    $resolved = (string) @realpath($cur);
+                    $resolved = (string) @realpath($cur); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 }
                 return [
                     'is_symlink'    => true,
@@ -499,7 +499,7 @@ final class ServerInspector {
             $cur = dirname($cur);
         }
 
-        $resolved = @realpath($web_dir);
+        $resolved = @realpath($web_dir); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         return [
             'is_symlink'    => false,
             'symlink_path'  => '',
@@ -533,9 +533,9 @@ final class ServerInspector {
         $wp_path      = (string) ($paths['wp_path'] ?? self::get_wp_path($web_dir));
         $raw_storage  = (string) ($paths['storage_dir'] ?? FileIntegrity::get_storage_dir());
         $storage_dir  = self::resolve_network_storage_dir($raw_storage);
-        $storage_real = @realpath($storage_dir);
+        $storage_real = @realpath($storage_dir); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         if (!is_string($storage_real) || '' === $storage_real) {
-            $parent_real  = @realpath(dirname($storage_dir));
+            $parent_real  = @realpath(dirname($storage_dir)); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             $storage_real = (is_string($parent_real) && '' !== $parent_real)
                 ? (rtrim($parent_real, '/') . '/' . basename($storage_dir))
                 : $storage_dir;
@@ -648,7 +648,7 @@ final class ServerInspector {
         $cron_cmd = 'echo ' . escapeshellarg($cron_line) . " | sudo tee /etc/cron.d/gratis-security\n"
             . 'sudo chmod 644 /etc/cron.d/gratis-security';
 
-        $deploy_hook = "sudo augenrules --load && sudo systemctl restart gratis-fim";
+        $deploy_hook = 'sudo augenrules --load && sudo systemctl restart gratis-fim';
 
         $aide_setup = self::build_aide_command($family, $pkg_name);
 
@@ -717,29 +717,29 @@ final class ServerInspector {
 
     private static function atomic_write_file(string $target, string $content): void {
         $dir = dirname($target);
-        if (!@is_dir($dir)) {
+        if (!@is_dir($dir)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             if (function_exists('wp_mkdir_p')) {
                 wp_mkdir_p($dir);
             } else {
-                @mkdir($dir, 0755, true);
+                @mkdir($dir, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Low-level local filesystem/OS security operation.
             }
         }
-        if (!@is_dir($dir) || !@is_writable($dir)) {
+        if (!@is_dir($dir) || !@is_writable($dir)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- Low-level local filesystem/OS security operation.
             return;
         }
-        $tmp = @tempnam($dir, 'gs_probe_');
+        $tmp = @tempnam($dir, 'gs_probe_'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         if (false === $tmp) {
-            @file_put_contents($target, $content, LOCK_EX);
+            @file_put_contents($target, $content, LOCK_EX); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
             return;
         }
-        if (false !== @file_put_contents($tmp, $content, LOCK_EX)) {
-            @chmod($tmp, 0644);
-            if (!@rename($tmp, $target)) {
-                @unlink($tmp);
-                @file_put_contents($target, $content, LOCK_EX);
+        if (false !== @file_put_contents($tmp, $content, LOCK_EX)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
+            @chmod($tmp, 0644); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Low-level local filesystem/OS security operation.
+            if (!@rename($tmp, $target)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.rename_rename -- Low-level local filesystem/OS security operation.
+                @unlink($tmp); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.unlink_unlink -- Low-level local filesystem/OS security operation.
+                @file_put_contents($target, $content, LOCK_EX); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
             }
         } else {
-            @unlink($tmp);
+            @unlink($tmp); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.unlink_unlink -- Low-level local filesystem/OS security operation.
         }
     }
 
@@ -771,7 +771,7 @@ final class ServerInspector {
             if (
                 $network_dir !== $dir
                 && '' !== $network_dir
-                && (@is_writable($network_dir) || (!@is_dir($network_dir) && @is_writable(dirname($network_dir))))
+                && (@is_writable($network_dir) || (!@is_dir($network_dir) && @is_writable(dirname($network_dir)))) // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- Low-level local filesystem/OS security operation.
             ) {
                 self::atomic_write_file($network_dir . '/' . self::PROBE_SNAPSHOT_FILE, $json);
             }
@@ -800,10 +800,10 @@ final class ServerInspector {
         $best_ts = 0;
 
         foreach ($candidates as $path) {
-            if (!@is_file($path) || !@is_readable($path)) {
+            if (!@is_file($path) || !@is_readable($path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 continue;
             }
-            $raw = @file_get_contents($path);
+            $raw = @file_get_contents($path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
             if (!is_string($raw) || '' === trim($raw)) {
                 continue;
             }
@@ -876,7 +876,7 @@ final class ServerInspector {
         $wp_cli_yml_path = $root_dir . '/wp-cli.yml';
         $wp_cli_yml_exists = false;
         foreach ($wp_cli_candidates as $cand) {
-            if (@file_exists($cand)) {
+            if (@file_exists($cand)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 $wp_cli_yml_path = $cand;
                 $wp_cli_yml_exists = true;
                 break;
@@ -898,7 +898,7 @@ final class ServerInspector {
                 $primary_log['path']     = $cand['path'];
                 $primary_log['exists']   = true;
                 $primary_log['readable'] = true;
-                $primary_log['writable'] = @is_writable($cand['path']);
+                $primary_log['writable'] = @is_writable($cand['path']); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- Low-level local filesystem/OS security operation.
                 $primary_log['size']     = $cand['size'];
                 $primary_log['mtime']    = $cand['mtime'];
                 break;
@@ -909,7 +909,7 @@ final class ServerInspector {
             $primary_log['path']     = $first['path'];
             $primary_log['exists']   = $first['exists'];
             $primary_log['readable'] = $first['readable'];
-            $primary_log['writable'] = $first['exists'] ? @is_writable($first['path']) : @is_writable(dirname($first['path']));
+            $primary_log['writable'] = $first['exists'] ? @is_writable($first['path']) : @is_writable(dirname($first['path'])); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- Low-level local filesystem/OS security operation.
             $primary_log['size']     = $first['size'];
             $primary_log['mtime']    = $first['mtime'];
         }
@@ -982,13 +982,13 @@ final class ServerInspector {
      */
     private static function probe_binary(string $name, array $candidate_paths, bool $can_shell): array {
         foreach ($candidate_paths as $path) {
-            if ('' !== $path && @is_executable($path)) {
+            if ('' !== $path && @is_executable($path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 return ['available' => true, 'path' => $path];
             }
         }
         if ($can_shell) {
             $which_cmd = (PHP_OS === 'WINNT') ? 'where' : 'which';
-            $out = @shell_exec($which_cmd . ' ' . escapeshellarg($name) . ' 2>/dev/null');
+            $out = @shell_exec($which_cmd . ' ' . escapeshellarg($name) . ' 2>/dev/null'); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec,WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level local filesystem/OS security operation.
             if (is_string($out) && '' !== trim($out)) {
                 $first = trim((string) strtok(trim($out), "\n"));
                 if ('' !== $first) {
@@ -1011,7 +1011,7 @@ final class ServerInspector {
         $dbus_denied = false;
 
         if ($can_shell && !empty($tools['systemctl']['available'])) {
-            $out     = @shell_exec('systemctl is-active auditd 2>&1');
+            $out     = @shell_exec('systemctl is-active auditd 2>&1'); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec,WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level local filesystem/OS security operation.
             $trimmed = is_string($out) ? trim($out) : '';
             if (self::is_dbus_denied($trimmed) || ('' === $trimmed && 'enforcing' === $selinux && 'cli' !== PHP_SAPI)) {
                 $dbus_denied = true;
@@ -1022,10 +1022,10 @@ final class ServerInspector {
         }
 
         $rules_file = '/etc/audit/rules.d/gratis-fim.rules';
-        $rules_file_readable = @is_readable($rules_file);
+        $rules_file_readable = @is_readable($rules_file); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         $rules_file_analysis = null;
         if ($rules_file_readable) {
-            $content = (string) @file_get_contents($rules_file);
+            $content = (string) @file_get_contents($rules_file); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
             $rules_file_analysis = self::analyze_audit_rules($content, $web_dir);
         }
 
@@ -1033,7 +1033,7 @@ final class ServerInspector {
         $kernel_analysis = null;
         if ($can_shell && $installed) {
             $auditctl_bin = (string) ($tools['auditctl']['path'] ?? 'auditctl');
-            $out = @shell_exec(escapeshellarg($auditctl_bin) . ' -l 2>&1');
+            $out = @shell_exec(escapeshellarg($auditctl_bin) . ' -l 2>&1'); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec,WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level local filesystem/OS security operation.
             if (is_string($out) && '' !== trim($out) && !str_contains(strtolower($out), 'must be root') && !self::is_dbus_denied($out)) {
                 $kernel_checked  = true;
                 $kernel_analysis = self::analyze_audit_rules($out, $web_dir);
@@ -1120,12 +1120,12 @@ final class ServerInspector {
         bool $log_readable = false
     ): array {
         $unit_path   = '/etc/systemd/system/gratis-fim.service';
-        $unit_exists = @file_exists($unit_path);
+        $unit_exists = @file_exists($unit_path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         $unit_analysis = null;
         $unit_user     = '';
 
-        if ($unit_exists && @is_readable($unit_path)) {
-            $raw = (string) @file_get_contents($unit_path);
+        if ($unit_exists && @is_readable($unit_path)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            $raw = (string) @file_get_contents($unit_path); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
             $unit_analysis = self::analyze_systemd_unit($raw, $web_dir);
             $unit_user     = (string) ($unit_analysis['user'] ?? '');
         }
@@ -1137,7 +1137,7 @@ final class ServerInspector {
         $dbus_denied  = false;
 
         if ($can_shell && !empty($tools['systemctl']['available'])) {
-            $show    = @shell_exec('systemctl show gratis-fim.service --property=LoadState,ActiveState,SubState,MainPID,User --no-pager 2>&1');
+            $show    = @shell_exec('systemctl show gratis-fim.service --property=LoadState,ActiveState,SubState,MainPID,User --no-pager 2>&1'); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec,WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level local filesystem/OS security operation.
             $trimmed = is_string($show) ? trim($show) : '';
             if (self::is_dbus_denied($trimmed) || ('' === $trimmed && 'enforcing' === $selinux && 'cli' !== PHP_SAPI)) {
                 $dbus_denied = true;
@@ -1264,17 +1264,17 @@ final class ServerInspector {
      * @return array<string,mixed>
      */
     private static function inspect_manifests(string $root_dir, array $tools, bool $can_shell): array {
-        $source   = @file_exists($root_dir . '/SOURCE-MANIFEST.sha256') ? ($root_dir . '/SOURCE-MANIFEST.sha256') : null;
-        $composer = @file_exists($root_dir . '/COMPOSER-MANIFEST.sha256') ? ($root_dir . '/COMPOSER-MANIFEST.sha256') : null;
+        $source   = @file_exists($root_dir . '/SOURCE-MANIFEST.sha256') ? ($root_dir . '/SOURCE-MANIFEST.sha256') : null; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+        $composer = @file_exists($root_dir . '/COMPOSER-MANIFEST.sha256') ? ($root_dir . '/COMPOSER-MANIFEST.sha256') : null; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
 
         $revision = null;
-        if (@file_exists($root_dir . '/REVISION')) {
-            $rev_raw = trim((string) @file_get_contents($root_dir . '/REVISION'));
+        if (@file_exists($root_dir . '/REVISION')) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            $rev_raw = trim((string) @file_get_contents($root_dir . '/REVISION')); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
             if ('' !== $rev_raw) {
                 $revision = $rev_raw;
             }
-        } elseif ($can_shell && !empty($tools['git']['available']) && @is_dir($root_dir . '/.git')) {
-            $git_rev = @shell_exec('cd ' . escapeshellarg($root_dir) . ' && git rev-parse --short HEAD 2>/dev/null');
+        } elseif ($can_shell && !empty($tools['git']['available']) && @is_dir($root_dir . '/.git')) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            $git_rev = @shell_exec('cd ' . escapeshellarg($root_dir) . ' && git rev-parse --short HEAD 2>/dev/null'); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec,WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level local filesystem/OS security operation.
             if (is_string($git_rev) && '' !== trim($git_rev)) {
                 $revision = trim($git_rev);
             }
@@ -1306,13 +1306,13 @@ final class ServerInspector {
         $sys_cron_found = false;
         $cron_paths = ['/etc/cron.d/gratis-security', '/etc/cron.d/gratis-fim'];
         foreach ($cron_paths as $cp) {
-            if (@file_exists($cp)) {
+            if (@file_exists($cp)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 $sys_cron_found = true;
                 break;
             }
         }
         if (!$sys_cron_found && $can_shell) {
-            $crontab = @shell_exec('crontab -l 2>/dev/null');
+            $crontab = @shell_exec('crontab -l 2>/dev/null'); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec,WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level local filesystem/OS security operation.
             if (is_string($crontab) && str_contains($crontab, 'gratis-security')) {
                 $sys_cron_found = true;
             }

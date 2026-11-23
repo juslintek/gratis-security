@@ -667,8 +667,8 @@ final class SignatureFeed {
         $file    = $dir . '/' . self::SIGNATURES_FILE;
 
         $stored = [];
-        if (@file_exists($file)) {
-            $raw = (string) @file_get_contents($file);
+        if (@file_exists($file)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            $raw = (string) @file_get_contents($file); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
             if ('' !== $raw) {
                 $decoded = FileIntegrity::simd_decode($raw, true);
                 if (is_array($decoded)) {
@@ -865,8 +865,8 @@ final class SignatureFeed {
 
         $existing_file = $dir . '/' . self::SIGNATURES_FILE;
         $existing      = [];
-        if (@file_exists($existing_file)) {
-            $decoded = FileIntegrity::simd_decode((string) @file_get_contents($existing_file), true);
+        if (@file_exists($existing_file)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            $decoded = FileIntegrity::simd_decode((string) @file_get_contents($existing_file), true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
             if (is_array($decoded)) {
                 $existing = $decoded;
             }
@@ -1062,10 +1062,10 @@ final class SignatureFeed {
     public static function get_feed_ips(?string $storage_dir = null): array {
         $dir  = self::resolve_storage_dir($storage_dir);
         $file = $dir . '/' . self::IP_BLOCKLIST_FILE;
-        if (!@file_exists($file)) {
+        if (!@file_exists($file)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             return [];
         }
-        $raw = (string) @file_get_contents($file);
+        $raw = (string) @file_get_contents($file); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
         if ('' === $raw) {
             return [];
         }
@@ -1212,7 +1212,7 @@ final class SignatureFeed {
         if (1 === preg_match('/(?<!\\\\)[+*](?<!\\\\)[+*]/', $pattern)) {
             return false;
         }
-        return false !== @preg_match($pattern, '');
+        return false !== @preg_match($pattern, ''); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
     }
 
     /**
@@ -1294,8 +1294,8 @@ final class SignatureFeed {
 
         if ('' === $version && defined('ABSPATH') && defined('WPINC')) {
             $ver_file = ABSPATH . WPINC . '/version.php';
-            if (@file_exists($ver_file)) {
-                $raw = (string) @file_get_contents($ver_file);
+            if (@file_exists($ver_file)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+                $raw = (string) @file_get_contents($ver_file); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
                 if (1 === preg_match('/\$wp_version\s*=\s*[\'"]([^\'"]+)[\'"]/', $raw, $m)) {
                     $version = $m[1];
                 }
@@ -1401,7 +1401,10 @@ final class SignatureFeed {
         if (false === filter_var($url, FILTER_VALIDATE_URL)) {
             return false;
         }
-        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+        $raw_scheme = function_exists('wp_parse_url')
+            ? wp_parse_url($url, PHP_URL_SCHEME)
+            : parse_url($url, PHP_URL_SCHEME); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Fallback when executed outside WordPress runtime.
+        $scheme = strtolower((string) $raw_scheme);
         if ('https' === $scheme) {
             return true;
         }
@@ -1431,19 +1434,20 @@ final class SignatureFeed {
     }
 
     private static function ensure_hardened_dir(string $dir): void {
-        if (!@is_dir($dir)) {
+        if (!@is_dir($dir)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
             if (function_exists('wp_mkdir_p')) {
                 wp_mkdir_p($dir);
             } else {
-                @mkdir($dir, 0755, true);
+                @mkdir($dir, 0755, true); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Low-level local filesystem/OS security operation.
             }
         }
         $htaccess = $dir . '/.htaccess';
-        if (!@file_exists($htaccess)) {
-            @file_put_contents($htaccess, "Require all denied\nDeny from all\n", LOCK_EX);
+        if (!@file_exists($htaccess)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            @file_put_contents($htaccess, "Require all denied\nDeny from all\n", LOCK_EX); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
         }
         $index = $dir . '/index.php';
-        if (!@file_exists($index)) {
+        if (!@file_exists($index)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+            // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
             @file_put_contents($index, "<?php\n// Silence is golden.\n", LOCK_EX);
         }
     }
@@ -1451,19 +1455,19 @@ final class SignatureFeed {
     private static function atomic_write(string $target, string $content): void {
         $dir = dirname($target);
         self::ensure_hardened_dir($dir);
-        $tmp = @tempnam($dir, 'gs_sig_');
+        $tmp = @tempnam($dir, 'gs_sig_'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         if (false === $tmp) {
-            @file_put_contents($target, $content, LOCK_EX);
+            @file_put_contents($target, $content, LOCK_EX); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
             return;
         }
-        if (false !== @file_put_contents($tmp, $content, LOCK_EX)) {
-            @chmod($tmp, 0640);
-            if (!@rename($tmp, $target)) {
-                @unlink($tmp);
-                @file_put_contents($target, $content, LOCK_EX);
+        if (false !== @file_put_contents($tmp, $content, LOCK_EX)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
+            @chmod($tmp, 0640); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Low-level local filesystem/OS security operation.
+            if (!@rename($tmp, $target)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.rename_rename -- Low-level local filesystem/OS security operation.
+                @unlink($tmp); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.unlink_unlink -- Low-level local filesystem/OS security operation.
+                @file_put_contents($target, $content, LOCK_EX); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Low-level local filesystem/OS security operation.
             }
         } else {
-            @unlink($tmp);
+            @unlink($tmp); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.unlink_unlink -- Low-level local filesystem/OS security operation.
         }
     }
 

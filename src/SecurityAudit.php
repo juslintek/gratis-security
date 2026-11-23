@@ -173,11 +173,11 @@ final class SecurityAudit {
      * @return array<string,mixed>
      */
     private static function check_storage_hardened(string $storage_dir): array {
-        $exists   = @is_dir($storage_dir);
-        $writable = $exists && @is_writable($storage_dir);
+        $exists   = @is_dir($storage_dir); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
+        $writable = $exists && @is_writable($storage_dir); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- Low-level local filesystem/OS security operation.
         $htaccess = $storage_dir . '/.htaccess';
-        $has_ht   = @file_exists($htaccess) && str_contains((string) @file_get_contents($htaccess), 'denied');
-        $has_idx  = @file_exists($storage_dir . '/index.php');
+        $has_ht   = @file_exists($htaccess) && str_contains((string) @file_get_contents($htaccess), 'denied'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Low-level local filesystem/OS security operation.
+        $has_idx  = @file_exists($storage_dir . '/index.php'); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
 
         if ($exists && $writable && $has_ht && $has_idx) {
             return self::entry(
@@ -416,7 +416,7 @@ final class SecurityAudit {
 
         $found = '';
         foreach (array_unique($candidates) as $cand) {
-            if (@file_exists($cand) && @is_file($cand)) {
+            if (@file_exists($cand) && @is_file($cand)) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
                 $found = $cand;
                 break;
             }
@@ -434,7 +434,7 @@ final class SecurityAudit {
             );
         }
 
-        $perms = @fileperms($found);
+        $perms = @fileperms($found); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Low-level filesystem or OS probe under open_basedir/SELinux.
         if (false === $perms) {
             return self::entry(
                 'wp_config_perms',
