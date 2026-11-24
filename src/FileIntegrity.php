@@ -887,7 +887,8 @@ final class FileIntegrity {
         if (str_starts_with($relative_path, 'web/wp/') || str_starts_with($relative_path, 'wp-admin/') || str_starts_with($relative_path, 'wp-includes/')) {
             global $wp_version;
             $core_sub = preg_replace('#^web/wp/#', '', $relative_path);
-            $raw_url = 'https://raw.githubusercontent.com/WordPress/WordPress/' . ($wp_version ?: 'master') . '/' . $core_sub;
+            $svn_ref  = $wp_version ? 'tags/' . rawurlencode((string) $wp_version) : 'trunk';
+            $raw_url  = 'https://core.svn.wordpress.org/' . $svn_ref . '/' . $core_sub;
             $upstream = wp_remote_get($raw_url, ['timeout' => 5]);
             if (!is_wp_error($upstream) && 200 === wp_remote_retrieve_response_code($upstream)) {
                 $orig_content = wp_remote_retrieve_body($upstream);
