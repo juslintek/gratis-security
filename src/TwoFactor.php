@@ -190,10 +190,12 @@ final class TwoFactor {
         // phpcs:ignore WordPress.Security.NonceVerification.Missing -- login nonce verified above.
         $remember = !empty($_POST['rememberme']);
         wp_set_auth_cookie($user->ID, $remember);
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core WordPress login lifecycle action.
         do_action('wp_login', $user->user_login, $user);
 
         // phpcs:ignore WordPress.Security.NonceVerification.Missing -- login nonce verified above.
         $requested   = isset($_POST['redirect_to']) ? esc_url_raw(wp_unslash($_POST['redirect_to'])) : '';
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core WordPress login redirect filter.
         $redirect_to = apply_filters('login_redirect', '' !== $requested ? $requested : admin_url(), $requested, $user);
         wp_safe_redirect('' !== (string) $redirect_to ? (string) $redirect_to : admin_url());
         exit;
